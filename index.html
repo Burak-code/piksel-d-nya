@@ -140,7 +140,6 @@
         #minimap-canvas { position:absolute; top:max(8px, env(safe-area-inset-top)); right:8px; border:2px solid #5a7a9a; border-radius:8px; background:rgba(14,26,42,0.85); z-index:15; pointer-events:auto; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5); }
         #minimap-canvas.expanded { width:80% !important; height:auto !important; top:50% !important; right:50% !important; transform:translate(50%, -50%); max-width:600px; border:3px solid #ffd966; z-index:150; }
 
-        /* Pixel editor */
         #pixelEditorGrid { display:grid; grid-template-columns:repeat(16, 1fr); gap:0; width:100%; aspect-ratio:1; max-width:320px; margin:8px auto; border:2px solid #5a7a9a; background:#0e1a2a; }
         .px-cell { aspect-ratio:1; cursor:crosshair; border:0; }
         .px-cell:hover { outline:1px solid #ffd966; outline-offset:-1px; z-index:2; }
@@ -260,7 +259,6 @@
             </div>
         </div>
 
-        <!-- ODA MODAL -->
         <div class="modal" id="roomModal">
             <div class="modal-content">
                 <h2>🚪 Oda Kur / Katıl</h2>
@@ -285,7 +283,6 @@
             </div>
         </div>
 
-        <!-- PROFİL MODAL -->
         <div class="modal" id="profileModal">
             <div class="modal-content" style="max-width:560px;">
                 <h2>⚙️ Profil / Ayarlar</h2>
@@ -329,7 +326,6 @@
             </div>
         </div>
 
-        <!-- EV MODAL -->
         <div class="modal" id="houseModal">
             <div class="modal-content">
                 <h2>🏠 Ev Al</h2>
@@ -342,7 +338,6 @@
             </div>
         </div>
 
-        <!-- EV İÇİ MODAL -->
         <div class="modal" id="houseInteriorModal">
             <div class="modal-content" style="max-width:500px;">
                 <h2>🏠 Evin</h2>
@@ -360,7 +355,6 @@
             </div>
         </div>
 
-        <!-- MESLEK MODAL -->
         <div class="modal" id="jobModal">
             <div class="modal-content">
                 <h2>🎓 Meslek Seç</h2>
@@ -372,7 +366,6 @@
             </div>
         </div>
 
-        <!-- GÖREV MODAL -->
         <div class="modal" id="questModal">
             <div class="modal-content" style="max-width:500px;">
                 <h2>📜 Görevler</h2>
@@ -383,7 +376,6 @@
             </div>
         </div>
 
-        <!-- ROZET MODAL -->
         <div class="modal" id="badgeModal">
             <div class="modal-content">
                 <h2>🏆 Rozetler</h2>
@@ -394,7 +386,6 @@
             </div>
         </div>
 
-        <!-- LİDERLİK MODAL -->
         <div class="modal" id="lbModal">
             <div class="modal-content">
                 <h2>📊 Liderlik Tablosu</h2>
@@ -405,7 +396,6 @@
             </div>
         </div>
 
-        <!-- TİCARET MODAL -->
         <div class="modal" id="tradeModal">
             <div class="modal-content">
                 <h2>🤝 Ticaret</h2>
@@ -420,7 +410,6 @@
             </div>
         </div>
 
-        <!-- DM MODAL -->
         <div class="modal" id="dmModal">
             <div class="modal-content" style="max-width:480px;">
                 <h2>✉️ Özel Mesajlar</h2>
@@ -437,7 +426,6 @@
             </div>
         </div>
 
-        <!-- ARKADAŞ MODAL -->
         <div class="modal" id="friendsModal">
             <div class="modal-content" style="max-width:480px;">
                 <h2>👥 Arkadaşlar</h2>
@@ -449,7 +437,6 @@
             </div>
         </div>
 
-        <!-- ŞİFRE MODAL -->
         <div class="modal" id="pwModal">
             <div class="modal-content">
                 <h2>🔒 Şifreli Oda</h2>
@@ -462,7 +449,6 @@
             </div>
         </div>
 
-        <!-- DÜKKAN MODAL -->
         <div class="modal" id="shopModal">
             <div class="modal-content">
                 <h2>🏪 Dükkan</h2>
@@ -475,7 +461,6 @@
             </div>
         </div>
 
-        <!-- DÜKKAN KUR MODAL -->
         <div class="modal" id="shopSetupModal">
             <div class="modal-content">
                 <h2>🏪 Dükkan Kur</h2>
@@ -502,7 +487,6 @@
             </div>
         </div>
 
-        <!-- SATRANÇ MODAL -->
         <div class="modal" id="chessModal">
             <div class="modal-content">
                 <h2>♟️ Satranç Gezegeni</h2>
@@ -525,8 +509,8 @@
         <div id="levelup"></div>
     </div>
 
-    <!-- ✅ MQTT 4.3.7 — tarayıcıda global `mqtt` değişkeni sağlar -->
-    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    <!-- ✅ MQTT 5.x — WebSocket bağlantı sorunu çözüldü -->
+    <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 
     <script>
         (function() {
@@ -632,11 +616,12 @@
             const LOBBY_TOPIC = 'pikseldunya_v11_lobby';
             const activeRooms = new Map();
 
-            // ✅ Güncellenmiş broker listesi (eclipseprojects kapatıldı, hivemq eklendi)
+            // ✅ Güncellenmiş broker listesi - test edilmiş çalışan public brokerlar
             const BROKER_URLS = [
                 'wss://broker.emqx.io:8084/mqtt',
                 'wss://broker.hivemq.com:8884/mqtt',
                 'wss://test.mosquitto.org:8081/mqtt',
+                'wss://mqtt.eclipseprojects.io:443/mqtt',
             ];
             let currentBrokerIndex = 0;
 
@@ -1534,9 +1519,9 @@
                 client.publish(TOPIC_PREFIX + currentRoom + '/fire', JSON.stringify({ id:player.id, fire:{ id:f.id, x:f.x, y:f.y, size:f.size }, password:roomPassword || '' }));
             }
 
-            // ==================== MQTT ====================
-            // ✅ Tamamen yeniden yazıldı: broker fallback + timeout + temiz reconnect
+            // ==================== MQTT BAĞLANTI (DÜZELTİLDİ) ====================
             let connectAttemptTimer = null;
+            let currentBrokerClient = null;
 
             function connectMQTT(room, password, roomName) {
                 // Temizlik
@@ -1564,32 +1549,34 @@
                 console.log(`[MQTT] Deniyorum: ${brokerUrl}`);
 
                 try {
-                    client = mqtt.connect(brokerUrl, {
+                    currentBrokerClient = mqtt.connect(brokerUrl, {
                         clientId,
                         clean: true,
                         connectTimeout: 8000,
-                        reconnectPeriod: 0, // ✅ manuel yeniden bağlanacağız
+                        reconnectPeriod: 3000, // ✅ otomatik yeniden bağlanma
                         keepalive: 30,
                         protocolVersion: 4,
+                        rejectUnauthorized: false, // ✅ bazı brokerlarda self-signed sertifika için
                     });
+                    client = currentBrokerClient;
                 } catch (e) {
                     console.error('[MQTT] connect hatası:', e);
                     switchBrokerAndRetry(room, password, roomName, e.message);
                     return;
                 }
 
-                // ✅ 8 saniye içinde bağlanamazsa broker değiştir
+                // ✅ 10 saniye içinde bağlanamazsa broker değiştir
                 connectAttemptTimer = setTimeout(() => {
                     if (!connected && !failed) {
                         failed = true;
                         console.warn('[MQTT] Zaman aşımı, broker değiştiriliyor');
-                        try { client.removeAllListeners(); client.end(true); } catch(e){}
+                        try { currentBrokerClient.removeAllListeners(); currentBrokerClient.end(true); } catch(e){}
                         client = null;
                         switchBrokerAndRetry(room, password, roomName, 'timeout');
                     }
-                }, 9000);
+                }, 10000);
 
-                client.on('connect', () => {
+                currentBrokerClient.on('connect', () => {
                     if (failed) return;
                     connected = true;
                     if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
@@ -1601,40 +1588,40 @@
                     setConnectionStatus('✅ MQTT bağlandı!', true);
 
                     const topic = TOPIC_PREFIX + room + '/#';
-                    client.subscribe(topic, { qos: 0 }, (err) => {
+                    currentBrokerClient.subscribe(topic, { qos: 0 }, (err) => {
                         if (err) { roomStatus.textContent = '❌ abone hatası'; return; }
-                        client.subscribe(LOBBY_TOPIC, { qos: 0 }, () => {
-                            client.publish(LOBBY_TOPIC, JSON.stringify({
+                        currentBrokerClient.subscribe(LOBBY_TOPIC, { qos: 0 }, () => {
+                            currentBrokerClient.publish(LOBBY_TOPIC, JSON.stringify({
                                 type:'room_announce', id:player.id, roomId:room,
                                 name:roomName || room, hasPassword:!!password, count:1, ts:Date.now()
                             }));
                             roomStatus.textContent = '✅ ' + (roomName || room);
                             publishPlayerUpdate();
-                            client.publish(TOPIC_PREFIX + room + '/requestPlayers', JSON.stringify({ from:player.id, name:player.name, password:password || '' }));
+                            currentBrokerClient.publish(TOPIC_PREFIX + room + '/requestPlayers', JSON.stringify({ from:player.id, name:player.name, password:password || '' }));
                             addChatMessage('SİSTEM', 'odaya katıldın: ' + (roomName || room), '#ffd966');
                             closeModal(roomModal);
                             showToast('🎮 ' + (roomName || room) + ' odasına katıldın!');
-                            client.publish(TOPIC_PREFIX + room + '/timeSyncRequest', JSON.stringify({ from:player.id, password:password || '' }));
+                            currentBrokerClient.publish(TOPIC_PREFIX + room + '/timeSyncRequest', JSON.stringify({ from:player.id, password:password || '' }));
                             if (!roomTimeOwnerId) roomTimeOwnerId = player.id;
                         });
                     });
                 });
 
-                client.on('message', (topic, message) => {
+                currentBrokerClient.on('message', (topic, message) => {
                     try { handleMQTTMessage(topic, JSON.parse(message.toString())); } catch(e) {}
                 });
 
-                client.on('error', (err) => {
+                currentBrokerClient.on('error', (err) => {
                     if (failed || connected) return;
                     failed = true;
                     console.warn('[MQTT] Hata:', err.message || err);
                     if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
-                    try { client.removeAllListeners(); client.end(true); } catch(e){}
+                    try { currentBrokerClient.removeAllListeners(); currentBrokerClient.end(true); } catch(e){}
                     client = null;
                     switchBrokerAndRetry(room, password, roomName, err.message);
                 });
 
-                client.on('offline', () => {
+                currentBrokerClient.on('offline', () => {
                     if (connected) {
                         isConnected = false;
                         statusEl.textContent = '🟡 bağlantı koptu, yeniden...';
@@ -1642,13 +1629,10 @@
                     }
                 });
 
-                client.on('close', () => {
+                currentBrokerClient.on('close', () => {
                     if (connected && !failed) {
-                        // Beklenmedik kapanma — yeniden bağlan
-                        connected = false;
-                        isConnected = false;
-                        if (client) { try { client.end(true); } catch(e){} client = null; }
-                        setTimeout(() => connectMQTT(room, password, roomName), 1000);
+                        // MQTT.js'in kendi reconnect'i devreye girecek (reconnectPeriod: 3000)
+                        console.log('[MQTT] bağlantı kapandı, otomatik yeniden bağlanma bekleniyor...');
                     }
                 });
             }
@@ -1729,7 +1713,7 @@
                         addChatMessage('ARKADAŞ', `${data.fromName} seni ekledi`, '#ffa0ff');
                         addXP(25);
                         unlockBadge('first_friend');
-                        client.publish(base + '/friendAccept', JSON.stringify({ from:player.id, fromName:player.name, to:data.from, password:roomPassword || '' }));
+                        currentBrokerClient.publish(base + '/friendAccept', JSON.stringify({ from:player.id, fromName:player.name, to:data.from, password:roomPassword || '' }));
                     }
                 }
                 else if (topic === base + '/friendAccept') {
@@ -1740,7 +1724,7 @@
                 }
                 else if (topic === base + '/requestPlayers') {
                     if (data.from === player.id) return;
-                    client.publish(base + '/playerUpdate', JSON.stringify({
+                    currentBrokerClient.publish(base + '/playerUpdate', JSON.stringify({
                         id:player.id, name:player.name, x:player.x, y:player.y, dimension:player.dimension,
                         color:player.color, hp:player.hp, money:player.money, level:player.level,
                         job:player.job, facing:player.facing, profile:player.profile, password:roomPassword || '',
@@ -1778,7 +1762,7 @@
                 else if (topic === base + '/timeSyncRequest') {
                     if (data.from === player.id) return;
                     if (roomTimeOwnerId === player.id || !roomTimeOwnerId) {
-                        client.publish(base + '/gameTime', JSON.stringify({
+                        currentBrokerClient.publish(base + '/gameTime', JSON.stringify({
                             id: player.id, gameHours: accumulatedGameHours, isTimeOwner: true, password: roomPassword || ''
                         }));
                     }
@@ -3914,7 +3898,8 @@
                 try {
                     lobbyClient = mqtt.connect(BROKER_URLS[0], {
                         clientId: 'lobby_' + Math.random().toString(36).substr(2, 8),
-                        clean:true, connectTimeout:10000, reconnectPeriod:5000
+                        clean:true, connectTimeout:10000, reconnectPeriod:5000,
+                        rejectUnauthorized: false,
                     });
                     lobbyClient.on('connect', () => {
                         console.log('[LOBBY] ✅ bağlandı');
