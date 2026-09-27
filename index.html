@@ -1,0 +1,3052 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1a1e2c">
+    <title>piksel dünya</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden; background: #1a1e2c;
+            font-family: 'Courier New', monospace; color: #e0e0e0;
+            touch-action: none; overscroll-behavior: none; position: fixed;
+        }
+        #game-container { position: fixed; top:0; left:0; width:100%; height:100%; background:#2a3a4a; overflow:hidden; }
+        canvas { display:block; width:100%; height:100%; image-rendering:crisp-edges; image-rendering:pixelated; touch-action:none; }
+
+        #ui {
+            position:absolute; top:0; left:0; width:100%; height:100%;
+            pointer-events:none; padding:8px; font-size:13px; text-shadow:2px 2px 0 #000;
+            padding-top:max(8px, env(safe-area-inset-top));
+            padding-bottom:max(8px, env(safe-area-inset-bottom));
+        }
+        .panel {
+            background:#1e2a3ae0; border:2px solid #5a7a9a; border-radius:8px;
+            padding:6px 10px; backdrop-filter:blur(2px); pointer-events:auto;
+            display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:12px;
+        }
+        .panel span { color:#ffd966; font-weight:bold; white-space:nowrap; }
+
+        .top-left { position:absolute; top:max(8px, env(safe-area-inset-top)); left:8px; display:flex; flex-direction:column; gap:6px; max-width:65%; }
+        .top-right { position:absolute; top:max(8px, env(safe-area-inset-top)); right:8px; display:flex; flex-direction:column; gap:6px; align-items:flex-end; max-width:35%; }
+
+        .xp-bar { width:100%; height:6px; background:#0e1a2a; border-radius:3px; overflow:hidden; margin-top:4px; }
+        .xp-fill { height:100%; background:linear-gradient(90deg, #4aa4e8, #6ae8c4); transition:width 0.3s; border-radius:3px; }
+
+        /* CLOCK */
+        #clockPanel { display:flex; gap:8px; align-items:center; }
+        #clockIcon { font-size:18px; }
+        #clockTime { color:#ffd966; font-weight:bold; }
+
+        /* ROOMS LIST */
+        .room-list {
+            background:#0e1a2ae0; border:2px solid #5a7a9a; border-radius:8px;
+            padding:8px 10px; pointer-events:auto; font-size:11px;
+            width:180px; max-height:180px; overflow-y:auto; color:#b0d0ff;
+        }
+        .room-list .title { color:#ffd966; font-weight:bold; margin-bottom:6px; font-size:12px; }
+        .room-item {
+            display:flex; justify-content:space-between; align-items:center;
+            padding:4px 6px; border-radius:4px; cursor:pointer;
+            background:#1a2a3a; margin-bottom:3px; border:1px solid #2a4a5a;
+        }
+        .room-item:hover { background:#2a3a4a; border-color:#5a7a9a; }
+        .room-item .name { color:#b0d0ff; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100px; }
+        .room-item .lock { font-size:10px; }
+        .room-item .count { color:#6ae8c4; font-size:10px; }
+
+        /* FIRE INDICATOR */
+        #fireWarning {
+            position:absolute; top:80px; left:50%; transform:translateX(-50%);
+            background:#ff4444ee; color:white; border:2px solid #ffaa00;
+            border-radius:8px; padding:6px 14px; font-size:12px; font-weight:bold;
+            pointer-events:none; display:none; z-index:50;
+            animation:pulse 1s infinite;
+        }
+        #fireWarning.active { display:block; }
+        @keyframes pulse { 0%,100% { transform:translateX(-50%) scale(1); } 50% { transform:translateX(-50%) scale(1.05); } }
+
+        .chat-toggle {
+            pointer-events:auto; background:#1e2a3ae0; border:2px solid #5a7a9a;
+            border-radius:8px; padding:6px 12px; color:#b0d0ff; cursor:pointer;
+            font-family:inherit; font-size:12px;
+        }
+        .chat-box {
+            background:#0e1a2ae0; border:2px solid #5a7a9a; border-radius:8px;
+            padding:6px 10px; width:220px; pointer-events:auto; font-size:11px;
+            max-height:120px; overflow-y:auto; color:#b0d0ff; margin-top:4px; display:none;
+        }
+        .chat-box.active { display:block; }
+        .chat-input { display:none; gap:4px; margin-top:4px; pointer-events:auto; }
+        .chat-input.active { display:flex; }
+        .chat-input input {
+            flex:1; background:#1e2a3a; border:1px solid #5a7a9a; border-radius:4px;
+            padding:6px 8px; color:white; font-family:inherit; font-size:12px; outline:none; min-width:0;
+        }
+        .chat-input button {
+            background:#3a5a8a; border:1px solid #7a9aba; border-radius:4px;
+            color:white; padding:6px 10px; font-family:inherit; font-size:12px; cursor:pointer;
+        }
+        .friend-list {
+            background:#1e2a3ae0; border:2px solid #5a7a9a; border-radius:8px;
+            padding:6px 10px; pointer-events:auto; font-size:11px;
+            max-height:80px; overflow-y:auto; color:#a0e0a0; min-width:110px;
+        }
+        .friend-list div { padding:2px 0; }
+
+        #joystick {
+            position:absolute; bottom:100px; left:20px; width:130px; height:130px;
+            border-radius:50%; background:#1e2a3a80; border:3px solid #5a7a9a80;
+            pointer-events:auto; display:none; touch-action:none;
+        }
+        #joystick.active { display:block; }
+        #joystick-knob {
+            position:absolute; top:50%; left:50%; width:55px; height:55px; border-radius:50%;
+            background:#5a7a9ac0; border:3px solid #8aaacaa0;
+            transform:translate(-50%, -50%); pointer-events:none;
+        }
+        #mobile-actions {
+            position:absolute; bottom:100px; right:20px; display:none;
+            flex-direction:column; gap:8px; pointer-events:auto;
+        }
+        #mobile-actions.active { display:flex; }
+        .action-btn {
+            width:56px; height:56px; border-radius:50%; background:#1e2a3ae0;
+            border:3px solid #5a7a9a; color:#ffd966; font-family:inherit; font-size:20px;
+            cursor:pointer; display:flex; align-items:center; justify-content:center;
+            flex-direction:column; font-weight:bold; touch-action:manipulation;
+        }
+        .action-btn:active { background:#3a5a8a; transform:scale(0.95); }
+        .action-btn small { font-size:8px; color:#a0b8d0; margin-top:-2px; }
+
+        .bottom-bar {
+            position:absolute; bottom:max(8px, env(safe-area-inset-bottom));
+            left:8px; right:8px; display:flex; justify-content:space-between;
+            align-items:flex-end; gap:8px; flex-wrap:wrap;
+        }
+        .controls-info {
+            background:#1e2a3ac0; border:2px solid #4a5a7a; border-radius:8px;
+            padding:5px 10px; font-size:10px; color:#a0b8d0; pointer-events:auto;
+        }
+        .trade-panel {
+            background:#1e2a3ae0; border:2px solid #8a7a4a; border-radius:8px;
+            padding:6px 10px; pointer-events:auto; font-size:12px;
+            display:flex; gap:6px; align-items:center; flex-wrap:wrap;
+        }
+        .trade-panel button {
+            background:#6a5a3a; border:1px solid #aa9a6a; border-radius:4px;
+            color:#ffd966; padding:6px 10px; font-family:inherit; font-size:12px; cursor:pointer;
+        }
+        .trade-panel button:active { transform:scale(0.95); }
+
+        #interact-hint {
+            position:absolute; bottom:250px; left:50%; transform:translateX(-50%);
+            background:#1e2a3ae0; border:2px solid #ffd966; border-radius:8px;
+            padding:8px 16px; color:#ffd966; font-size:13px; pointer-events:none;
+            display:none; white-space:nowrap; z-index:50;
+        }
+
+        .modal {
+            position:fixed; top:0; left:0; width:100%; height:100%;
+            background:#000000d0; display:none; justify-content:center;
+            align-items:center; pointer-events:auto; z-index:100;
+            padding:16px; overflow-y:auto;
+        }
+        .modal.active { display:flex; }
+        .modal-content {
+            background:#1e2a3a; border:3px solid #6a8aaa; border-radius:12px;
+            padding:20px; width:100%; max-width:420px; text-align:center;
+            max-height:90vh; overflow-y:auto;
+        }
+        .modal-content h2 { color:#ffd966; margin-bottom:14px; font-size:18px; }
+        .modal-content input {
+            width:100%; background:#0e1a2a; border:2px solid #5a7a9a; border-radius:6px;
+            padding:10px 12px; color:white; font-family:inherit; font-size:14px;
+            margin-bottom:10px; outline:none;
+        }
+        .modal-content input:focus { border-color:#ffd966; }
+        .modal-content button {
+            background:#3a6a4a; border:2px solid #6aaa7a; border-radius:6px;
+            color:white; padding:10px 20px; font-family:inherit; font-size:14px;
+            cursor:pointer; margin:4px; font-weight:bold;
+        }
+        .modal-content button:active { transform:scale(0.96); }
+        .modal-content button.cancel { background:#6a3a3a; border-color:#aa6a6a; }
+        .modal-content button.secondary { background:#3a5a8a; border-color:#6a8aaa; }
+        .modal-content .label {
+            text-align:left; color:#a0b8d0; font-size:12px;
+            margin-bottom:4px; margin-top:8px;
+        }
+
+        .char-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin:12px 0; }
+        .char-option {
+            aspect-ratio:1; border:3px solid #5a7a9a; border-radius:8px;
+            background:#0e1a2a; cursor:pointer; display:flex; align-items:center;
+            justify-content:center; padding:4px; transition:all 0.15s;
+        }
+        .char-option.selected { border-color:#ffd966; box-shadow:0 0 12px #ffd96680; background:#2a3a4a; }
+        .char-option canvas { width:100%; height:100%; image-rendering:pixelated; }
+
+        .color-row { display:flex; gap:6px; margin:8px 0; flex-wrap:wrap; justify-content:center; }
+        .color-swatch {
+            width:30px; height:30px; border-radius:6px; border:2px solid #5a7a9a;
+            cursor:pointer; transition:transform 0.1s;
+        }
+        .color-swatch.selected { border-color:#ffd966; box-shadow:0 0 8px #ffd96680; transform:scale(1.1); }
+
+        .quest-list { display:flex; flex-direction:column; gap:8px; text-align:left; max-height:60vh; overflow-y:auto; }
+        .quest-item {
+            background:#0e1a2a; border:2px solid #5a7a9a; border-radius:8px;
+            padding:10px; font-size:12px;
+        }
+        .quest-item.done { border-color:#4aa44a; background:#1a2a1a; }
+        .quest-item.claimed { border-color:#6a6a6a; opacity:0.5; }
+        .quest-item h3 { color:#ffd966; font-size:13px; margin-bottom:4px; }
+        .quest-item .desc { color:#a0b8d0; font-size:11px; margin-bottom:6px; }
+        .quest-item .progress { color:#6ae8c4; font-size:11px; margin-bottom:4px; }
+        .quest-item .reward { color:#ffd966; font-size:11px; margin-bottom:6px; }
+        .quest-item button { padding:4px 12px; font-size:11px; margin:0; }
+
+        .lb-list { display:flex; flex-direction:column; gap:4px; text-align:left; }
+        .lb-row {
+            display:flex; justify-content:space-between; padding:6px 10px;
+            background:#0e1a2a; border-radius:6px; font-size:12px;
+            border:1px solid #2a3a4a;
+        }
+        .lb-row.me { border-color:#ffd966; background:#2a3a4a; }
+        .lb-rank { color:#ffd966; font-weight:bold; min-width:30px; }
+        .lb-name { flex:1; margin:0 8px; overflow:hidden; text-overflow:ellipsis; }
+        .lb-money { color:#6ae8c4; font-weight:bold; }
+
+        .badge-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-top:8px; }
+        .badge-item {
+            aspect-ratio:1; background:#0e1a2a; border:2px solid #5a7a9a;
+            border-radius:8px; display:flex; flex-direction:column;
+            align-items:center; justify-content:center; font-size:20px;
+            opacity:0.3; transition:all 0.2s;
+        }
+        .badge-item.unlocked { opacity:1; border-color:#ffd966; box-shadow:0 0 8px #ffd96660; }
+        .badge-item small { font-size:8px; color:#a0b8d0; margin-top:2px; text-align:center; padding:0 2px; }
+
+        /* JOBS MODAL */
+        .job-list { display:grid; grid-template-columns:1fr 1fr; gap:8px; text-align:left; }
+        .job-item {
+            background:#0e1a2a; border:2px solid #5a7a9a; border-radius:8px;
+            padding:10px; cursor:pointer; transition:all 0.15s;
+        }
+        .job-item:hover { background:#2a3a4a; border-color:#6a8aaa; }
+        .job-item.selected { border-color:#ffd966; background:#2a3a4a; box-shadow:0 0 8px #ffd96660; }
+        .job-item h3 { color:#ffd966; font-size:12px; margin-bottom:4px; }
+        .job-item .desc { color:#a0b8d0; font-size:10px; }
+
+        #toast {
+            position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+            background:#1e2a3aee; border:3px solid #ffd966; border-radius:10px;
+            padding:14px 24px; color:#ffd966; font-size:14px; font-weight:bold;
+            z-index:200; display:none; pointer-events:none; text-align:center; max-width:80%;
+        }
+        #toast.active { display:block; animation:toastAnim 0.3s ease; }
+        @keyframes toastAnim { from { opacity:0; transform:translate(-50%, -60%); } to { opacity:1; transform:translate(-50%, -50%); } }
+
+        #connection-status {
+            position:fixed; top:0; left:0; right:0; background:#ff4444;
+            color:white; text-align:center; padding:4px; font-size:11px;
+            z-index:300; display:none;
+        }
+        #connection-status.show { display:block; }
+        #connection-status.ok { background:#44aa44; }
+
+        #levelup {
+            position:fixed; top:40%; left:50%; transform:translate(-50%, -50%) scale(0);
+            background:linear-gradient(135deg, #ffd966, #ff8a3a); color:#1a1e2c;
+            border-radius:16px; padding:20px 40px; font-size:24px; font-weight:bold;
+            text-align:center; z-index:250; pointer-events:none;
+            box-shadow:0 0 40px #ffd96680; opacity:0; white-space:pre-line;
+        }
+        #levelup.show { animation:levelupAnim 2.2s ease-out; }
+        @keyframes levelupAnim {
+            0% { transform:translate(-50%, -50%) scale(0); opacity:0; }
+            20% { transform:translate(-50%, -50%) scale(1.2); opacity:1; }
+            40% { transform:translate(-50%, -50%) scale(1); opacity:1; }
+            80% { transform:translate(-50%, -50%) scale(1); opacity:1; }
+            100% { transform:translate(-50%, -50%) scale(1); opacity:0; }
+        }
+
+        @media (min-width: 768px) {
+            #joystick { display:none !important; }
+            #mobile-actions { display:none !important; }
+            #ui { padding:12px; }
+            .chat-box { width:260px; font-size:12px; }
+        }
+        @media (max-width: 767px) {
+            .controls-info { display:none; }
+            .trade-panel { padding:4px 6px; font-size:10px; gap:3px; }
+            .trade-panel button { padding:5px 5px; font-size:10px; }
+            .bottom-bar { justify-content:center; bottom:8px; }
+            .bottom-bar .trade-panel { margin:0 auto; }
+            .top-left .panel { font-size:9px; padding:3px 6px; gap:5px; }
+            .friend-list { font-size:9px; max-height:60px; min-width:80px; }
+            .chat-box { width:160px; font-size:10px; }
+            .room-list { width:140px; font-size:10px; max-height:120px; }
+            #interact-hint { bottom:260px; font-size:11px; padding:5px 10px; }
+            .modal-content { padding:14px; }
+            .job-list { grid-template-columns:1fr; }
+        }
+        @media (max-width: 380px) {
+            .action-btn { width:50px; height:50px; font-size:18px; }
+            #joystick { width:110px; height:110px; }
+            #joystick-knob { width:48px; height:48px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="connection-status"></div>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui">
+            <div class="top-left">
+                <div class="panel" style="flex-direction:column; align-items:flex-start; gap:2px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <span>💰 <span id="moneyDisplay">0</span></span>
+                        <span>❤️ <span id="hpDisplay">100</span></span>
+                        <span>⭐ <span id="levelDisplay">1</span></span>
+                        <span>💼 <span id="jobDisplay">Yok</span></span>
+                    </div>
+                    <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
+                </div>
+                <div class="panel" style="font-size:11px; gap:6px;">
+                    <span id="status">🔌 bağlanıyor...</span>
+                </div>
+                <div class="panel" id="clockPanel" style="font-size:11px;">
+                    <span id="clockIcon">☀️</span>
+                    <span>Gün <span id="clockDay">1</span></span>
+                    <span id="clockTime">06:00</span>
+                </div>
+            </div>
+
+            <div class="top-right">
+                <div class="room-list" id="roomList">
+                    <div class="title">📋 Aktif Odalar</div>
+                </div>
+                <button class="chat-toggle" id="chatToggleBtn" style="margin-top:4px;">💬 sohbet</button>
+                <div class="chat-box" id="chatBox">
+                    <div style="color:#6a8aaa;">oda sohbeti</div>
+                </div>
+                <div class="chat-input" id="chatInputWrap">
+                    <input type="text" id="chatInput" placeholder="mesaj..." maxlength="80">
+                    <button id="sendChatBtn">➤</button>
+                </div>
+                <div class="friend-list" id="friendList">
+                    <div style="color:#5a7a9a;">arkadaşlar (0)</div>
+                </div>
+            </div>
+
+            <div id="fireWarning">🔥 YANGIN! İtfaiyeci çağır!</div>
+            <div id="interact-hint"></div>
+
+            <div id="joystick"><div id="joystick-knob"></div></div>
+
+            <div id="mobile-actions">
+                <button class="action-btn" id="mobileWorkBtn">💼<small>çalış</small></button>
+                <button class="action-btn" id="mobileInteractBtn">💬<small>etkileşim</small></button>
+                <button class="action-btn" id="mobileTradeBtn">🤝<small>ticaret</small></button>
+            </div>
+
+            <div class="bottom-bar">
+                <div class="controls-info">
+                    WASD: hareket | E: etkileşim | Q: çalış | P: profil | J: meslek | G: görev | B: rozet | L: liderlik
+                </div>
+                <div class="trade-panel">
+                    <span>🪙 <span id="tradeMoneyDisplay">0</span></span>
+                    <button id="workBtn">💼</button>
+                    <button id="jobBtn">🎓</button>
+                    <button id="questBtn">📜</button>
+                    <button id="tradeBtn">🤝</button>
+                    <button id="profileBtn">⚙️</button>
+                    <button id="badgeBtn">🏆</button>
+                    <button id="lbBtn">📊</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ODA MODAL -->
+        <div class="modal" id="roomModal">
+            <div class="modal-content">
+                <h2>🚪 Oda Kur / Katıl</h2>
+                <div class="label">oda adı</div>
+                <input type="text" id="roomNameInput" placeholder="oda adı" value="piksel-dunyasi" maxlength="20">
+                <div class="label">şifre (opsiyonel)</div>
+                <input type="password" id="roomPasswordInput" placeholder="şifre" maxlength="30">
+                <div>
+                    <button id="createRoomBtn">Yeni Oda Kur</button>
+                    <button id="joinRoomBtn" class="secondary">Katıl</button>
+                </div>
+                <div style="margin-top:12px;font-size:12px;color:#a0b8d0;" id="roomStatus"></div>
+
+                <div style="margin-top:14px;text-align:left;">
+                    <div style="color:#ffd966;font-size:13px;font-weight:bold;margin-bottom:6px;">📋 Aktif Odalar</div>
+                    <div class="room-list" style="width:100%;max-height:180px;" id="modalRoomList">
+                        <div style="color:#6a8aaa;font-size:11px;">yükleniyor...</div>
+                    </div>
+                </div>
+                <div style="margin-top:12px;">
+                    <button class="cancel" id="closeRoomBtn">Kapat</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PROFİL MODAL -->
+        <div class="modal" id="profileModal">
+            <div class="modal-content">
+                <h2>⚙️ Profil</h2>
+                <div class="label">oyuncu adı</div>
+                <input type="text" id="profileNameInput" placeholder="adın" maxlength="16">
+
+                <div class="label">isim rengi (başkaları seni böyle görür)</div>
+                <div class="color-row" id="nameColors"></div>
+
+                <div class="label">karakter</div>
+                <div class="char-grid" id="charGrid"></div>
+
+                <div class="label">kıyafet rengi</div>
+                <div class="color-row" id="shirtColors"></div>
+
+                <div class="label">saç rengi</div>
+                <div class="color-row" id="hairColors"></div>
+
+                <div class="label">ten rengi</div>
+                <div class="color-row" id="skinColors"></div>
+
+                <div style="margin-top:14px;">
+                    <button id="saveProfileBtn">Kaydet</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MESLEK MODAL -->
+        <div class="modal" id="jobModal">
+            <div class="modal-content">
+                <h2>🎓 Meslek Seç</h2>
+                <div style="font-size:12px;color:#a0b8d0;margin-bottom:10px;">
+                    Şu anki mesleğin: <span id="currentJob" style="color:#ffd966;">Yok</span>
+                </div>
+                <div class="job-list" id="jobList"></div>
+                <div style="margin-top:14px;">
+                    <button class="cancel" id="closeJobBtn">Kapat</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- GÖREV MODAL -->
+        <div class="modal" id="questModal">
+            <div class="modal-content" style="max-width:500px;">
+                <h2>📜 Görevler</h2>
+                <div class="quest-list" id="questList"></div>
+                <div style="margin-top:14px;">
+                    <button class="cancel" id="closeQuestBtn">Kapat</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ROZET MODAL -->
+        <div class="modal" id="badgeModal">
+            <div class="modal-content">
+                <h2>🏆 Rozetler</h2>
+                <div class="badge-grid" id="badgeGrid"></div>
+                <div style="margin-top:14px;">
+                    <button class="cancel" id="closeBadgeBtn">Kapat</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- LİDERLİK MODAL -->
+        <div class="modal" id="lbModal">
+            <div class="modal-content">
+                <h2>📊 Liderlik Tablosu</h2>
+                <div style="font-size:11px;color:#a0b8d0;margin-bottom:8px;">En zengin oyuncular</div>
+                <div class="lb-list" id="lbList"></div>
+                <div style="margin-top:14px;">
+                    <button class="cancel" id="closeLbBtn">Kapat</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TİCARET MODAL -->
+        <div class="modal" id="tradeModal">
+            <div class="modal-content">
+                <h2>🤝 Ticaret</h2>
+                <div class="label">hedef oyuncu adı</div>
+                <input type="text" id="tradeTargetInput" placeholder="oyuncu adı" maxlength="16">
+                <div class="label">miktar</div>
+                <input type="number" id="tradeAmountInput" placeholder="10" value="10" min="1">
+                <div>
+                    <button id="sendTradeBtn">Gönder</button>
+                    <button class="cancel" id="cancelTradeBtn">İptal</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ŞİFRE MODAL -->
+        <div class="modal" id="pwModal">
+            <div class="modal-content">
+                <h2>🔒 Şifreli Oda</h2>
+                <div class="label">oda şifresi</div>
+                <input type="password" id="pwInput" placeholder="şifre" maxlength="30">
+                <div>
+                    <button id="pwOkBtn">Gir</button>
+                    <button class="cancel" id="pwCancelBtn">İptal</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- DÜKKAN MODAL -->
+        <div class="modal" id="shopModal">
+            <div class="modal-content">
+                <h2>🏪 Dükkan</h2>
+                <div style="color:#a0b8d0;font-size:12px;margin-bottom:10px;">
+                    <span id="shopOwnerName"></span>
+                </div>
+                <div style="color:#6ae8c4;font-size:12px;margin-bottom:12px;">
+                    💰 Senin paran: <span id="shopYourMoney">0</span>
+                </div>
+                <div id="shopItems" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;"></div>
+                <div style="margin-top:14px;">
+                    <button class="cancel" id="closeShopBtn">Kapat</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- DÜKKAN KUR MODAL -->
+        <div class="modal" id="shopSetupModal">
+            <div class="modal-content">
+                <h2>🏪 Dükkan Kur</h2>
+                <div class="label">dükkan adı</div>
+                <input type="text" id="shopNameInput" placeholder="dükkan adı" maxlength="20" value="Dükkanım">
+                <div class="label">köy/şehir</div>
+                <div id="villageSelect" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;"></div>
+                <div style="color:#a0b8d0;font-size:11px;margin-bottom:10px;">Maliyet: 500 💰</div>
+                <div>
+                    <button id="setupShopBtn">Aç</button>
+                    <button class="cancel" id="cancelSetupShopBtn">İptal</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="toast"></div>
+        <div id="levelup"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+
+    <script>
+        (function() {
+            'use strict';
+
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                          || (window.matchMedia && window.matchMedia('(max-width: 767px)').matches);
+
+            // ==================== SABİTLER ====================
+            const WORLD_W = 4000;
+            const WORLD_H = 3000;
+            const PLAYER_SIZE = 28;
+            const MOVE_SPEED = 3.5;
+            const INTERACT_RANGE = 70;
+            const DAY_LENGTH = 120000; // 2 dakika = tam bir gün (gündüz+gece)
+
+            // ==================== LEVELS ====================
+            const LEVELS = [
+                { level:1, xp:0, title:'Köylü' },
+                { level:2, xp:100, title:'Gezgin' },
+                { level:3, xp:300, title:'Tüccar' },
+                { level:4, xp:600, title:'Zanaatkar' },
+                { level:5, xp:1000, title:'Kaşif' },
+                { level:6, xp:1600, title:'Deneyimli' },
+                { level:7, xp:2400, title:'Usta' },
+                { level:8, xp:3500, title:'Şampiyon' },
+                { level:9, xp:5000, title:'Efsane' },
+                { level:10, xp:7000, title:'Kahraman' },
+                { level:15, xp:20000, title:'Zengin' },
+                { level:20, xp:50000, title:'İmparator' },
+                { level:30, xp:150000, title:'Efsanevi' },
+            ];
+
+            // ==================== BADGES ====================
+            const BADGES = [
+                { id:'first_work', icon:'💼', name:'İlk İş' },
+                { id:'first_chest', icon:'💎', name:'Hazine Avcısı' },
+                { id:'first_friend', icon:'👥', name:'Sosyal' },
+                { id:'rich_1000', icon:'💰', name:'Bin Zengin' },
+                { id:'rich_10000', icon:'🤑', name:'On Bin' },
+                { id:'rich_100000', icon:'🏦', name:'Yüz Bin' },
+                { id:'level_5', icon:'⭐', name:'Seviye 5' },
+                { id:'level_10', icon:'🌟', name:'Seviye 10' },
+                { id:'firefighter', icon:'🚒', name:'İtfaiyeci' },
+                { id:'policeman', icon:'👮', name:'Polis' },
+                { id:'farmer', icon:'🌾', name:'Çiftçi' },
+                { id:'miner', icon:'⛏️', name:'Madenci' },
+                { id:'shop_owner', icon:'🏪', name:'Dükkan Sahibi' },
+                { id:'fire_hero', icon:'🔥', name:'Yangın Kahramanı' },
+                { id:'explorer', icon:'🗺️', name:'Kaşif' },
+                { id:'quest_master', icon:'📜', name:'Görev Ustası' },
+            ];
+
+            // ==================== MESLEKLER ====================
+            const JOBS = [
+                { id:'none', icon:'👤', name:'Mesleksiz', desc:'Hiçbir mesleğin yok' },
+                { id:'farmer', icon:'🌾', name:'Çiftçi', desc:'Çiftlikte çalışırken +50% kazanç' },
+                { id:'miner', icon:'⛏️', name:'Madenci', desc:'Madende çalışırken +50% kazanç' },
+                { id:'firefighter', icon:'🚒', name:'İtfaiyeci', desc:'Yangınları söndürebilir (E tuşu)' },
+                { id:'policeman', icon:'👮', name:'Polis', desc:'Suçluları yakalar, güvenlik sağlar' },
+                { id:'fisher', icon:'🎣', name:'Balıkçı', desc:'Gölette çalışırken +50% kazanç' },
+                { id:'lumberjack', icon:'🪓', name:'Oduncu', desc:'Kampında çalışırken +50% kazanç' },
+                { id:'merchant', icon:'💼', name:'Tüccar', desc:'Ticarette +2 ekstra XP' },
+            ];
+
+            // ==================== KARAKTERLER ====================
+            const CHARACTERS = [
+                { id:'default', name:'Gezgin', hairStyle:0, eyeStyle:0, bodyType:0, hasHat:false, hasBeard:false },
+                { id:'warrior', name:'Savaşçı', hairStyle:1, eyeStyle:1, bodyType:0, hasHat:false, hasBeard:true },
+                { id:'mage', name:'Büyücü', hairStyle:2, eyeStyle:0, bodyType:1, hasHat:true, hasBeard:false },
+                { id:'rogue', name:'Suikastçı', hairStyle:1, eyeStyle:2, bodyType:1, hasHat:true, hasBeard:false },
+                { id:'archer', name:'Okçu', hairStyle:3, eyeStyle:0, bodyType:0, hasHat:false, hasBeard:false },
+                { id:'knight', name:'Şövalye', hairStyle:0, eyeStyle:1, bodyType:0, hasHat:true, hasBeard:false },
+                { id:'merchant', name:'Tüccar', hairStyle:3, eyeStyle:0, bodyType:1, hasHat:false, hasBeard:true },
+                { id:'bard', name:'Ozan', hairStyle:2, eyeStyle:2, bodyType:0, hasHat:false, hasBeard:false },
+            ];
+
+            const SHIRT_COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e91e63','#34495e','#d35400','#16a085'];
+            const HAIR_COLORS = ['#2c1810','#4a2a1a','#8b4513','#d4a017','#f0e68c','#c0c0c0','#000000','#8b0000'];
+            const SKIN_COLORS = ['#f5cba7','#e0ac69','#c68642','#8d5524','#6b4423','#ffdbac','#d2a679','#a07050'];
+            const NAME_COLORS = ['#ffd966','#ff6b6b','#6ae8c4','#a0d8ff','#ffa0ff','#a0e0a0','#ffffff','#ff8a3a'];
+
+            // ==================== GÖREVLER ====================
+            const QUEST_DEFS = [
+                { id:'first_steps', title:'İlk Adımlar', desc:'3 kez çalış', goal:{ type:'work', count:3 }, reward:{ money:100, xp:50 }, icon:'💼' },
+                { id:'hungry', title:'Açım!', desc:'5 elma topla', goal:{ type:'collect_food', count:5 }, reward:{ money:150, xp:80 }, icon:'🍎' },
+                { id:'treasure', title:'Hazine Avcısı', desc:'2 sandık aç', goal:{ type:'open_chest', count:2 }, reward:{ money:250, xp:120 }, icon:'💎' },
+                { id:'explore', title:'Kaşif', desc:'Tüm şehirleri ziyaret et', goal:{ type:'visit_city', count:4 }, reward:{ money:500, xp:250 }, icon:'🗺️' },
+                { id:'social', title:'Sosyal Kelebek', desc:'1 arkadaş ekle', goal:{ type:'friend', count:1 }, reward:{ money:200, xp:100 }, icon:'👥' },
+                { id:'rich', title:'Küçük Tüccar', desc:'1000 para biriktir', goal:{ type:'money', count:1000 }, reward:{ money:500, xp:300 }, icon:'💰' },
+                { id:'firefighter_q', title:'Yangın Söndürücü', desc:'3 yangın söndür', goal:{ type:'extinguish_fire', count:3 }, reward:{ money:600, xp:300 }, icon:'🚒' },
+                { id:'worker', title:'Çalışkan', desc:'15 kez çalış', goal:{ type:'work', count:15 }, reward:{ money:400, xp:200 }, icon:'⚒️' },
+            ];
+
+            // ==================== OYUNCU ====================
+            const player = {
+                id:'p_' + Math.random().toString(36).substr(2, 9),
+                name:'Gezgin' + Math.floor(Math.random() * 1000),
+                x:650, y:550,
+                color:'#e0a060',
+                money:100,
+                hp:100,
+                level:1,
+                xp:0,
+                friends:[],
+                badges:[],
+                job:'none',
+                facing:'down',
+                animFrame:0,
+                animTimer:0,
+                lastMoveTime:Date.now(),
+                lastRegenTime:Date.now(),
+                profile:{
+                    charId:0,
+                    shirtColor:'#3498db',
+                    hairColor:'#4a2a1a',
+                    skinColor:'#e0ac69',
+                    pantsColor:'#2a3a5a',
+                    nameColor:'#ffd966',
+                },
+                quests:{},
+                stats:{
+                    workCount:0,
+                    foodCollected:0,
+                    chestsOpened:0,
+                    citiesVisited:[],
+                    tradeCount:0,
+                    friendCount:0,
+                    firesExtinguished:0,
+                },
+            };
+
+            // ==================== DÜNYA ====================
+            const world = {
+                villages:[
+                    { x:400, y:300, w:500, h:400, name:'Piksel Köyü', color:'#4a3a2a', roofColor:'#8a5a3a' },
+                    { x:2600, y:1800, w:600, h:500, name:'Liman Şehri', color:'#2a4a5a', roofColor:'#3a7a9a' },
+                    { x:1300, y:2200, w:450, h:350, name:'Dağ Kasabası', color:'#5a4a3a', roofColor:'#8a7a5a' },
+                    { x:2900, y:500, w:500, h:400, name:'Orman Köyü', color:'#2a4a2a', roofColor:'#4a8a4a' },
+                ],
+                roads:[],
+                npcs:[],
+                trees:[],
+                rocks:[],
+                apples:[],        // ağaçlardan düşen elmalar
+                foods:[],         // sabit yiyecekler
+                inns:[],
+                workZones:[],
+                chests:[],
+                fires:[],         // yangınlar
+                streetLights:[],  // sokak lambaları
+                shops:[],         // dükkanlar (oyuncu + npc)
+                jobTrainers:[],   // meslek öğretmenleri
+            };
+
+            const otherPlayers = new Map();
+            const camera = { x:0, y:0 };
+
+            // ==================== ZAMAN ====================
+            const gameTime = {
+                day: 1,
+                timeOfDay: 0.25, // 0-1 arası (0=gece yarısı, 0.25=sabah, 0.5=öğle, 0.75=akşam)
+                speed: 1 / DAY_LENGTH,
+            };
+
+            // ==================== MQTT ====================
+            let client = null;
+            let currentRoom = null;
+            let roomPassword = null;
+            let isConnected = false;
+            const TOPIC_PREFIX = 'pikseldunya_v5/';
+            const LOBBY_TOPIC = 'pikseldunya_v5_lobby';
+            const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+            const activeRooms = new Map(); // roomId -> { name, hasPassword, count, lastSeen }
+
+            // ==================== DOM ====================
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+
+            const $ = id => document.getElementById(id);
+            const moneyDisplay = $('moneyDisplay');
+            const hpDisplay = $('hpDisplay');
+            const levelDisplay = $('levelDisplay');
+            const jobDisplay = $('jobDisplay');
+            const xpFill = $('xpFill');
+            const statusEl = $('status');
+            const chatBox = $('chatBox');
+            const chatInput = $('chatInput');
+            const sendChatBtn = $('sendChatBtn');
+            const chatToggleBtn = $('chatToggleBtn');
+            const chatInputWrap = $('chatInputWrap');
+            const friendList = $('friendList');
+            const interactHint = $('interact-hint');
+            const tradeMoneyDisplay = $('tradeMoneyDisplay');
+            const toast = $('toast');
+            const connectionStatus = $('connection-status');
+            const levelupEl = $('levelup');
+            const clockIcon = $('clockIcon');
+            const clockDay = $('clockDay');
+            const clockTime = $('clockTime');
+            const roomListEl = $('roomList');
+            const modalRoomList = $('modalRoomList');
+            const fireWarning = $('fireWarning');
+
+            const roomModal = $('roomModal');
+            const roomNameInput = $('roomNameInput');
+            const roomPasswordInput = $('roomPasswordInput');
+            const createRoomBtn = $('createRoomBtn');
+            const joinRoomBtn = $('joinRoomBtn');
+            const roomStatus = $('roomStatus');
+            const closeRoomBtn = $('closeRoomBtn');
+
+            const profileModal = $('profileModal');
+            const profileNameInput = $('profileNameInput');
+            const nameColorsEl = $('nameColors');
+            const charGrid = $('charGrid');
+            const shirtColorsEl = $('shirtColors');
+            const hairColorsEl = $('hairColors');
+            const skinColorsEl = $('skinColors');
+            const saveProfileBtn = $('saveProfileBtn');
+
+            const jobModal = $('jobModal');
+            const jobList = $('jobList');
+            const currentJob = $('currentJob');
+            const closeJobBtn = $('closeJobBtn');
+
+            const questModal = $('questModal');
+            const questList = $('questList');
+            const closeQuestBtn = $('closeQuestBtn');
+
+            const badgeModal = $('badgeModal');
+            const badgeGrid = $('badgeGrid');
+            const closeBadgeBtn = $('closeBadgeBtn');
+
+            const lbModal = $('lbModal');
+            const lbList = $('lbList');
+            const closeLbBtn = $('closeLbBtn');
+
+            const tradeModal = $('tradeModal');
+            const tradeTargetInput = $('tradeTargetInput');
+            const tradeAmountInput = $('tradeAmountInput');
+            const sendTradeBtn = $('sendTradeBtn');
+            const cancelTradeBtn = $('cancelTradeBtn');
+
+            const pwModal = $('pwModal');
+            const pwInput = $('pwInput');
+            const pwOkBtn = $('pwOkBtn');
+            const pwCancelBtn = $('pwCancelBtn');
+
+            const shopModal = $('shopModal');
+            const shopOwnerName = $('shopOwnerName');
+            const shopYourMoney = $('shopYourMoney');
+            const shopItems = $('shopItems');
+            const closeShopBtn = $('closeShopBtn');
+
+            const shopSetupModal = $('shopSetupModal');
+            const shopNameInput = $('shopNameInput');
+            const villageSelect = $('villageSelect');
+            const setupShopBtn = $('setupShopBtn');
+            const cancelSetupShopBtn = $('cancelSetupShopBtn');
+
+            const workBtn = $('workBtn');
+            const jobBtn = $('jobBtn');
+            const questBtn = $('questBtn');
+            const tradeBtn = $('tradeBtn');
+            const profileBtn = $('profileBtn');
+            const badgeBtn = $('badgeBtn');
+            const lbBtn = $('lbBtn');
+
+            const joystick = $('joystick');
+            const joystickKnob = $('joystick-knob');
+            const mobileActions = $('mobile-actions');
+            const mobileWorkBtn = $('mobileWorkBtn');
+            const mobileInteractBtn = $('mobileInteractBtn');
+            const mobileTradeBtn = $('mobileTradeBtn');
+
+            // ==================== CANVAS ====================
+            let CANVAS_W, CANVAS_H;
+            function resizeCanvas() {
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                CANVAS_W = window.innerWidth;
+                CANVAS_H = window.innerHeight;
+                canvas.width = CANVAS_W * dpr;
+                canvas.height = CANVAS_H * dpr;
+                canvas.style.width = CANVAS_W + 'px';
+                canvas.style.height = CANVAS_H + 'px';
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.imageSmoothingEnabled = false;
+            }
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+
+            if (isMobile) {
+                joystick.classList.add('active');
+                mobileActions.classList.add('active');
+                const ci = document.querySelector('.controls-info');
+                if (ci) ci.style.display = 'none';
+            }
+
+            // ==================== JOYSTICK ====================
+            const joyState = { active:false, dx:0, dy:0 };
+
+            function updateJoy(cx, cy, rect) {
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                let dx = cx - centerX;
+                let dy = cy - centerY;
+                const dist = Math.hypot(dx, dy);
+                const maxDist = rect.width / 2 - 20;
+                if (dist > maxDist) { dx = (dx / dist) * maxDist; dy = (dy / dist) * maxDist; }
+                joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                joyState.dx = dx / maxDist;
+                joyState.dy = dy / maxDist;
+                if (Math.abs(joyState.dx) < 0.15) joyState.dx = 0;
+                if (Math.abs(joyState.dy) < 0.15) joyState.dy = 0;
+            }
+
+            joystick.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const rect = joystick.getBoundingClientRect();
+                const touch = e.touches[0];
+                joyState.active = true;
+                updateJoy(touch.clientX, touch.clientY, rect);
+            }, { passive: false });
+            joystick.addEventListener('touchmove', (e) => {
+                if (!joyState.active) return;
+                e.preventDefault();
+                const rect = joystick.getBoundingClientRect();
+                const touch = e.touches[0];
+                updateJoy(touch.clientX, touch.clientY, rect);
+            }, { passive: false });
+            function endJoy(e) {
+                if (!joyState.active) return;
+                e.preventDefault();
+                joyState.active = false;
+                joyState.dx = 0; joyState.dy = 0;
+                joystickKnob.style.transform = 'translate(-50%, -50%)';
+            }
+            joystick.addEventListener('touchend', endJoy, { passive: false });
+            joystick.addEventListener('touchcancel', endJoy, { passive: false });
+
+            // ==================== KLAVYE ====================
+            const keys = {};
+            window.addEventListener('keydown', (e) => {
+                const k = e.key.toLowerCase();
+                if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+                    if (k === 'enter' && document.activeElement === chatInput) { sendChat(); e.preventDefault(); }
+                    return;
+                }
+                keys[k] = true;
+                if (k === 'e') interactWithNearest();
+                if (k === 'q') work();
+                if (k === 'p') openProfileModal();
+                if (k === 'j') openJobModal();
+                if (k === 'g') openQuestModal();
+                if (k === 'b') openBadgeModal();
+                if (k === 'l') openLbModal();
+            });
+            window.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+
+            // ==================== UI ====================
+            function getLevelInfo() {
+                let current = LEVELS[0];
+                let next = null;
+                for (let i = 0; i < LEVELS.length; i++) {
+                    if (player.xp >= LEVELS[i].xp) {
+                        current = LEVELS[i];
+                        next = LEVELS[i + 1] || null;
+                    } else break;
+                }
+                return { current, next };
+            }
+
+            function updateUI() {
+                moneyDisplay.textContent = player.money;
+                hpDisplay.textContent = player.hp;
+                levelDisplay.textContent = player.level;
+                jobDisplay.textContent = JOBS.find(j => j.id === player.job)?.name || 'Yok';
+                tradeMoneyDisplay.textContent = player.money;
+                shopYourMoney.textContent = player.money;
+
+                const li = getLevelInfo();
+                const curXp = li.current.xp;
+                const nextXp = li.next ? li.next.xp : player.xp;
+                const range = nextXp - curXp;
+                const progress = range > 0 ? Math.min(100, ((player.xp - curXp) / range) * 100) : 100;
+                xpFill.style.width = progress + '%';
+
+                friendList.innerHTML = `<div style="color:#5a7a9a;">arkadaşlar (${player.friends.length})</div>`;
+                player.friends.forEach(f => {
+                    const div = document.createElement('div');
+                    div.textContent = '👤 ' + f;
+                    friendList.appendChild(div);
+                });
+
+                saveProfileToLocal();
+            }
+
+            function addChatMessage(name, text, color = '#b0d0ff') {
+                const div = document.createElement('div');
+                div.style.color = color;
+                div.style.marginBottom = '2px';
+                div.textContent = `[${name}]: ${text}`;
+                chatBox.appendChild(div);
+                chatBox.scrollTop = chatBox.scrollHeight;
+                while (chatBox.children.length > 40) chatBox.removeChild(chatBox.children[1]);
+            }
+
+            function showToast(msg, duration = 1800) {
+                toast.textContent = msg;
+                toast.classList.add('active');
+                clearTimeout(showToast._t);
+                showToast._t = setTimeout(() => toast.classList.remove('active'), duration);
+            }
+
+            function openModal(m) {
+                document.querySelectorAll('.modal').forEach(x => x.classList.remove('active'));
+                m.classList.add('active');
+            }
+            function closeModal(m) { m.classList.remove('active'); }
+
+            function setConnectionStatus(text, ok) {
+                connectionStatus.textContent = text;
+                connectionStatus.classList.add('show');
+                connectionStatus.classList.toggle('ok', !!ok);
+                if (ok) {
+                    clearTimeout(setConnectionStatus._t);
+                    setConnectionStatus._t = setTimeout(() => {
+                        connectionStatus.classList.remove('show');
+                    }, 2000);
+                }
+            }
+
+            // ==================== XP / LEVEL ====================
+            function addXP(amount) {
+                const oldLevel = getLevelInfo().current.level;
+                player.xp += amount;
+                const newLevel = getLevelInfo().current.level;
+                if (newLevel > oldLevel) {
+                    player.level = newLevel;
+                    const title = LEVELS.find(l => l.level === newLevel)?.title || '?';
+                    levelupEl.textContent = `⭐ SEVİYE ${newLevel} ⭐\n${title}`;
+                    levelupEl.classList.remove('show');
+                    void levelupEl.offsetWidth;
+                    levelupEl.classList.add('show');
+                    showToast(`⭐ Seviye ${newLevel}: ${title}!`, 2500);
+                    if (newLevel >= 5) unlockBadge('level_5');
+                    if (newLevel >= 10) unlockBadge('level_10');
+                }
+                updateUI();
+            }
+
+            function unlockBadge(id) {
+                if (player.badges.includes(id)) return;
+                player.badges.push(id);
+                const b = BADGES.find(x => x.id === id);
+                if (b) {
+                    showToast(`🏆 ${b.icon} ${b.name} rozeti!`, 2200);
+                    addChatMessage('ROZET', `kazandın: ${b.icon} ${b.name}`, '#ffd966');
+                }
+                saveProfileToLocal();
+            }
+
+            // ==================== GÖREVLER ====================
+            function initQuests() {
+                QUEST_DEFS.forEach(q => {
+                    if (!player.quests[q.id]) {
+                        player.quests[q.id] = { progress:0, claimed:false };
+                    }
+                });
+            }
+
+            function updateQuestProgress(type, amount = 1) {
+                for (const q of QUEST_DEFS) {
+                    const p = player.quests[q.id];
+                    if (!p || p.claimed) continue;
+                    if (q.goal.type !== type) continue;
+                    if (type === 'visit_city') continue;
+                    if (type === 'money') p.progress = player.money;
+                    else p.progress = Math.min(q.goal.count, p.progress + amount);
+                    if (p.progress >= q.goal.count) {
+                        showToast(`📜 Görev tamamlandı: ${q.title}!`, 2200);
+                        addChatMessage('GÖREV', `tamamlandı: ${q.icon} ${q.title}`, '#ffd966');
+                    }
+                }
+                saveProfileToLocal();
+            }
+
+            function openQuestModal() { renderQuestList(); openModal(questModal); }
+
+            function renderQuestList() {
+                questList.innerHTML = '';
+                QUEST_DEFS.forEach(q => {
+                    const p = player.quests[q.id] || { progress:0, claimed:false };
+                    const done = p.progress >= q.goal.count;
+                    const item = document.createElement('div');
+                    item.className = 'quest-item' + (p.claimed ? ' claimed' : (done ? ' done' : ''));
+                    let progressText = '';
+                    if (q.goal.type === 'visit_city') progressText = `Şehirler: ${player.stats.citiesVisited.length}/${q.goal.count}`;
+                    else if (q.goal.type === 'money') progressText = `Para: ${player.money}/${q.goal.count}`;
+                    else progressText = `İlerleme: ${p.progress}/${q.goal.count}`;
+                    item.innerHTML = `
+                        <h3>${q.icon} ${q.title}</h3>
+                        <div class="desc">${q.desc}</div>
+                        <div class="progress">${progressText}</div>
+                        <div class="reward">🎁 ${q.reward.money}💰 + ${q.reward.xp} XP</div>
+                    `;
+                    if (p.claimed) {
+                        const span = document.createElement('span');
+                        span.style.color = '#6a6a6a';
+                        span.textContent = '✅ Alındı';
+                        item.appendChild(span);
+                    } else if (done) {
+                        const btn = document.createElement('button');
+                        btn.textContent = '🎁 Ödülü Al';
+                        btn.onclick = () => claimQuestReward(q);
+                        item.appendChild(btn);
+                    }
+                    questList.appendChild(item);
+                });
+            }
+
+            function claimQuestReward(q) {
+                const p = player.quests[q.id];
+                if (!p || p.claimed || p.progress < q.goal.count) return;
+                p.claimed = true;
+                player.money += q.reward.money;
+                addXP(q.reward.xp);
+                updateQuestProgress('money');
+                showToast(`🎁 +${q.reward.money}💰 +${q.reward.xp}XP`, 2000);
+                renderQuestList();
+                const claimed = Object.values(player.quests).filter(x => x.claimed).length;
+                if (claimed >= 5) unlockBadge('quest_master');
+                updateUI();
+            }
+
+            // ==================== ROZETLER ====================
+            function renderBadges() {
+                badgeGrid.innerHTML = '';
+                BADGES.forEach(b => {
+                    const el = document.createElement('div');
+                    el.className = 'badge-item' + (player.badges.includes(b.id) ? ' unlocked' : '');
+                    el.innerHTML = `<div>${b.icon}</div><small>${b.name}</small>`;
+                    badgeGrid.appendChild(el);
+                });
+            }
+            function openBadgeModal() { renderBadges(); openModal(badgeModal); }
+
+            // ==================== LİDERLİK ====================
+            function openLbModal() { renderLeaderboard(); openModal(lbModal); }
+            function renderLeaderboard() {
+                const all = [{ name: player.name + ' (sen)', money: player.money, me: true, color: player.profile.nameColor }];
+                for (const p of otherPlayers.values()) {
+                    all.push({ name: p.name, money: p.money, color: p.profile?.nameColor });
+                }
+                all.sort((a, b) => b.money - a.money);
+                lbList.innerHTML = '';
+                all.slice(0, 15).forEach((entry, i) => {
+                    const row = document.createElement('div');
+                    row.className = 'lb-row' + (entry.me ? ' me' : '');
+                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+                    row.innerHTML = `
+                        <div class="lb-rank">${medal}</div>
+                        <div class="lb-name" style="color:${entry.color || '#b0d0ff'}">${entry.name}</div>
+                        <div class="lb-money">${entry.money}💰</div>
+                    `;
+                    lbList.appendChild(row);
+                });
+            }
+
+            // ==================== MESLEK ====================
+            function openJobModal() {
+                renderJobList();
+                openModal(jobModal);
+            }
+
+            function renderJobList() {
+                jobList.innerHTML = '';
+                currentJob.textContent = JOBS.find(j => j.id === player.job)?.name || 'Yok';
+                JOBS.forEach(j => {
+                    const el = document.createElement('div');
+                    el.className = 'job-item' + (player.job === j.id ? ' selected' : '');
+                    el.innerHTML = `
+                        <h3>${j.icon} ${j.name}</h3>
+                        <div class="desc">${j.desc}</div>
+                    `;
+                    if (player.job !== j.id) {
+                        el.onclick = () => {
+                            player.job = j.id;
+                            showToast(`${j.icon} ${j.name} oldun!`, 2000);
+                            addChatMessage('MESLEK', `${j.icon} ${j.name} mesleğini aldın!`, '#ffd966');
+                            // Rozetler
+                            if (j.id === 'firefighter') unlockBadge('firefighter');
+                            if (j.id === 'policeman') unlockBadge('policeman');
+                            if (j.id === 'farmer') unlockBadge('farmer');
+                            if (j.id === 'miner') unlockBadge('miner');
+                            renderJobList();
+                            updateUI();
+                            publishPlayerUpdate();
+                        };
+                    }
+                    jobList.appendChild(el);
+                });
+            }
+
+            jobBtn.addEventListener('click', openJobModal);
+            closeJobBtn.addEventListener('click', () => closeModal(jobModal));
+
+            // ==================== SOHBET ====================
+            function sendChat() {
+                const text = chatInput.value.trim();
+                if (!text) return;
+                if (!isConnected) { addChatMessage('SİSTEM', 'bağlı değilsin!', '#ffa0a0'); return; }
+                publishChat(text);
+                addChatMessage(player.name, text, player.profile.nameColor);
+                chatInput.value = '';
+            }
+            sendChatBtn.addEventListener('click', sendChat);
+            chatToggleBtn.addEventListener('click', () => {
+                const active = chatBox.classList.toggle('active');
+                chatInputWrap.classList.toggle('active', active);
+            });
+
+            // ==================== ÇALIŞMA ====================
+            function work() {
+                let zone = null;
+                let zoneDist = Infinity;
+                for (const z of world.workZones) {
+                    const d = Math.hypot(z.x - player.x, z.y - player.y);
+                    if (d < z.radius && d < zoneDist) { zoneDist = d; zone = z; }
+                }
+
+                if (!zone) {
+                    if (player.hp <= 5) { showToast('çok yorgunsun! ❤️'); return; }
+                    player.hp = Math.max(0, player.hp - 5);
+                    const earned = 5 + Math.floor(Math.random() * 16);
+                    player.money += earned;
+                    player.stats.workCount++;
+                    updateQuestProgress('work', 1);
+                    updateQuestProgress('money');
+                    updateUI();
+                    publishPlayerUpdate();
+                    showToast(`+${earned} 💰  (-5 ❤️)`);
+                    addXP(5);
+                    if (player.stats.workCount === 1) unlockBadge('first_work');
+                    checkRichBadges();
+                    return;
+                }
+
+                const now = Date.now();
+                if (now - zone.lastUsed < zone.cooldown) {
+                    const remaining = ((zone.cooldown - (now - zone.lastUsed)) / 1000).toFixed(1);
+                    showToast(`⏱ ${remaining}s bekle...`);
+                    return;
+                }
+
+                if (player.hp <= zone.hpCost) { showToast('çok yorgunsun! ❤️'); return; }
+
+                let earned = zone.minPay + Math.floor(Math.random() * (zone.maxPay - zone.minPay + 1));
+                // Meslek bonusu
+                if ((zone.id === 'farm' && player.job === 'farmer') ||
+                    (zone.id === 'mine' && player.job === 'miner') ||
+                    (zone.id === 'fishing' && player.job === 'fisher') ||
+                    (zone.id === 'lumber' && player.job === 'lumberjack')) {
+                    earned = Math.floor(earned * 1.5);
+                }
+
+                player.hp -= zone.hpCost;
+                player.money += earned;
+                zone.lastUsed = now;
+                player.stats.workCount++;
+
+                let bonusMsg = '';
+                if (Math.random() < 0.08) {
+                    player.hp = Math.min(100, player.hp + 10);
+                    bonusMsg = ' +10❤️';
+                }
+
+                updateQuestProgress('work', 1);
+                updateQuestProgress('money');
+                updateUI();
+                publishPlayerUpdate();
+                showToast(`${zone.icon} ${zone.name}: +${earned} 💰  (-${zone.hpCost} ❤️)${bonusMsg}`);
+                addXP(10);
+                if (player.stats.workCount === 1) unlockBadge('first_work');
+                checkRichBadges();
+            }
+            workBtn.addEventListener('click', work);
+            mobileWorkBtn.addEventListener('click', work);
+
+            function checkRichBadges() {
+                if (player.money >= 1000) unlockBadge('rich_1000');
+                if (player.money >= 10000) unlockBadge('rich_10000');
+                if (player.money >= 100000) unlockBadge('rich_100000');
+            }
+
+            // ==================== YANGIN SÖNDÜRME ====================
+            function tryExtinguishFire() {
+                if (player.job !== 'firefighter') {
+                    showToast('🚒 itfaiyeci olman gerek!');
+                    return;
+                }
+                let nearest = null;
+                let nearestDist = 100;
+                for (const f of world.fires) {
+                    if (f.extinguished) continue;
+                    const d = Math.hypot(f.x - player.x, f.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = f; }
+                }
+                if (!nearest) {
+                    showToast('yakında yangın yok 🤷');
+                    return;
+                }
+                nearest.extinguished = true;
+                nearest.extinguishTimer = 1000;
+                player.stats.firesExtinguished++;
+                updateQuestProgress('extinguish_fire', 1);
+                const reward = 40 + Math.floor(Math.random() * 30);
+                player.money += reward;
+                updateUI();
+                showToast(`🚒 Yangın söndürüldü! +${reward}💰`);
+                addChatMessage('İTFAİYE', `${player.name} bir yangını söndürdü! +${reward}💰`, '#ff8a3a');
+                addXP(30);
+                if (player.stats.firesExtinguished >= 1) unlockBadge('fire_hero');
+                publishPlayerUpdate();
+            }
+
+            // ==================== ETKİLEŞİM ====================
+            function interactWithNearest() {
+                let nearest = null;
+                let nearestDist = INTERACT_RANGE;
+                let nearestType = null;
+
+                // Yangın (itfaiyeci için öncelikli)
+                if (player.job === 'firefighter') {
+                    for (const f of world.fires) {
+                        if (f.extinguished) continue;
+                        const d = Math.hypot(f.x - player.x, f.y - player.y);
+                        if (d < 100 && d < nearestDist) {
+                            nearestDist = d; nearest = f; nearestType = 'fire';
+                        }
+                    }
+                    if (nearestType === 'fire') {
+                        tryExtinguishFire();
+                        return;
+                    }
+                }
+
+                // Elma
+                for (const food of world.foods) {
+                    if (!food.active) continue;
+                    const d = Math.hypot(food.x - player.x, food.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = food; nearestType = 'food'; }
+                }
+                // Ağaçtan düşen elma
+                for (const apple of world.apples) {
+                    if (apple.collected) continue;
+                    const d = Math.hypot(apple.x - player.x, apple.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = apple; nearestType = 'apple'; }
+                }
+                // Sandık
+                for (const chest of world.chests) {
+                    if (chest.opened) continue;
+                    const d = Math.hypot(chest.x - player.x, chest.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = chest; nearestType = 'chest'; }
+                }
+                // Dükkan
+                for (const shop of world.shops) {
+                    const d = Math.hypot(shop.x - player.x, shop.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = shop; nearestType = 'shop'; }
+                }
+                // Han
+                for (const inn of world.inns) {
+                    const d = Math.hypot(inn.x - player.x, inn.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = inn; nearestType = 'inn'; }
+                }
+                // NPC
+                for (const npc of world.npcs) {
+                    const d = Math.hypot(npc.x - player.x, npc.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = npc; nearestType = 'npc'; }
+                }
+                // Oyuncu
+                for (const p of otherPlayers.values()) {
+                    const d = Math.hypot(p.x - player.x, p.y - player.y);
+                    if (d < nearestDist) { nearestDist = d; nearest = p; nearestType = 'player'; }
+                }
+
+                if (!nearest) { showToast('yakında bir şey yok 🤷'); return; }
+
+                if (nearestType === 'food' || nearestType === 'apple') {
+                    if (player.hp >= 100) { showToast('canın zaten dolu 💚'); return; }
+                    const heal = nearest.heal || 15;
+                    player.hp = Math.min(100, player.hp + heal);
+                    nearest.active = false;
+                    if (nearestType === 'apple') nearest.collected = true;
+                    else nearest.respawnTimer = 15000;
+                    player.stats.foodCollected++;
+                    updateQuestProgress('collect_food', 1);
+                    updateUI();
+                    showToast(`🍎 +${heal} HP kazandın!`);
+                    addXP(3);
+                    publishPlayerUpdate();
+                    return;
+                }
+
+                if (nearestType === 'chest') {
+                    const gold = nearest.minGold + Math.floor(Math.random() * (nearest.maxGold - nearest.minGold + 1));
+                    player.money += gold;
+                    nearest.opened = true;
+                    nearest.respawnTimer = 60000;
+                    player.stats.chestsOpened++;
+                    updateQuestProgress('open_chest', 1);
+                    updateQuestProgress('money');
+                    updateUI();
+                    publishPlayerUpdate();
+                    showToast(`💎 Hazine! +${gold} 💰`);
+                    addXP(50);
+                    if (player.stats.chestsOpened === 1) unlockBadge('first_chest');
+                    checkRichBadges();
+                    return;
+                }
+
+                if (nearestType === 'shop') {
+                    openShop(nearest);
+                    return;
+                }
+
+                if (nearestType === 'inn') {
+                    if (player.hp >= 100) { showToast('canın zaten dolu 💚'); return; }
+                    const cost = nearest.healCost;
+                    if (player.money < cost) { showToast(`❌ ${cost} 💰 gerekli`); return; }
+                    const heal = 100 - player.hp;
+                    player.money -= cost;
+                    player.hp = 100;
+                    updateUI();
+                    showToast(`🏠 -${cost}💰 +${heal}❤️`);
+                    publishPlayerUpdate();
+                    return;
+                }
+
+                if (nearestType === 'npc') {
+                    chatBox.classList.add('active');
+                    const d = nearest.dialogue[Math.floor(Math.random() * nearest.dialogue.length)];
+                    addChatMessage(nearest.name, d, '#a0e0a0');
+                    return;
+                }
+
+                if (nearestType === 'player') {
+                    chatBox.classList.add('active');
+                    addChatMessage('BİLGİ', `${nearest.name} | ❤️${nearest.hp} | 💰${nearest.money} | ⭐${nearest.level || 1}`, '#b0d0ff');
+                    return;
+                }
+            }
+            mobileInteractBtn.addEventListener('click', interactWithNearest);
+
+            // ==================== DÜKKAN ====================
+            function openShop(shop) {
+                shopOwnerName.textContent = '👤 ' + shop.ownerName;
+                shopYourMoney.textContent = player.money;
+                shopItems.innerHTML = '';
+                if (!shop.items || shop.items.length === 0) {
+                    shopItems.innerHTML = '<div style="color:#6a8aaa;font-size:11px;">Bu dükkan boş.</div>';
+                } else {
+                    shop.items.forEach((item, idx) => {
+                        const el = document.createElement('div');
+                        el.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:#0e1a2a;border:1px solid #2a4a5a;border-radius:6px;padding:8px 12px;font-size:12px;';
+                        el.innerHTML = `
+                            <div style="text-align:left;">
+                                <div style="color:#ffd966;font-weight:bold;">${item.name}</div>
+                                <div style="color:#a0b8d0;font-size:10px;">${item.desc || ''}</div>
+                            </div>
+                            <button style="background:#3a6a4a;border:1px solid #6aaa7a;border-radius:4px;color:white;padding:4px 12px;font-size:11px;cursor:pointer;">
+                                ${item.price}💰
+                            </button>
+                        `;
+                        el.querySelector('button').onclick = () => buyItem(shop, item, idx);
+                        shopItems.appendChild(el);
+                    });
+                }
+                openModal(shopModal);
+            }
+
+            function buyItem(shop, item, idx) {
+                if (player.money < item.price) {
+                    showToast('❌ yeterli para yok!');
+                    return;
+                }
+                player.money -= item.price;
+                // Dükkan sahibi para kazanır
+                if (shop.ownerId === player.id) {
+                    // kendi ürününü almış - saçma
+                    showToast('kendi ürününü alamazsın');
+                    return;
+                }
+                // Etki
+                if (item.effect === 'heal') {
+                    player.hp = Math.min(100, player.hp + item.value);
+                    showToast(`💚 +${item.value} HP`);
+                }
+                // Dükkan sahibine parayı gönder
+                if (shop.ownerId) {
+                    publishTrade({
+                        type: 'shop_purchase',
+                        from: player.id, fromName: player.name,
+                        to: shop.ownerId, amount: item.price,
+                    });
+                }
+                updateUI();
+                showToast(`✅ ${item.name} aldın!`);
+                if (shop.ownerId === player.id) {
+                    // kendi dükkanından satın aldı
+                }
+                // Kendi dükkanıysa stok düşür
+                if (shop.ownerId === player.id) {
+                    shop.items.splice(idx, 1);
+                }
+                closeModal(shopModal);
+                publishPlayerUpdate();
+            }
+
+            // Dükkan kurma
+            function openShopSetup() {
+                villageSelect.innerHTML = '';
+                world.villages.forEach((v, i) => {
+                    const el = document.createElement('div');
+                    el.style.cssText = 'background:#0e1a2a;border:2px solid #5a7a9a;border-radius:6px;padding:8px;cursor:pointer;text-align:center;font-size:11px;';
+                    el.textContent = v.name;
+                    el.onclick = () => {
+                        villageSelect.querySelectorAll('div').forEach(x => x.style.borderColor = '#5a7a9a');
+                        el.style.borderColor = '#ffd966';
+                        villageSelect.dataset.selected = i;
+                    };
+                    if (i === 0) el.style.borderColor = '#ffd966';
+                    villageSelect.appendChild(el);
+                });
+                villageSelect.dataset.selected = '0';
+                openModal(shopSetupModal);
+            }
+
+            setupShopBtn.addEventListener('click', () => {
+                if (player.money < 500) {
+                    showToast('❌ 500 💰 gerekli');
+                    return;
+                }
+                const name = shopNameInput.value.trim() || 'Dükkanım';
+                const vIdx = parseInt(villageSelect.dataset.selected || '0');
+                const v = world.villages[vIdx];
+                const shopX = v.x + v.w / 2 + (Math.random() - 0.5) * 100;
+                const shopY = v.y + v.h / 2 + (Math.random() - 0.5) * 100;
+                const shopId = 'shop_' + player.id;
+                // Aynı yerde varsa sil
+                const existingIdx = world.shops.findIndex(s => s.id === shopId);
+                if (existingIdx >= 0) world.shops.splice(existingIdx, 1);
+                const shop = {
+                    id: shopId,
+                    name,
+                    x: shopX, y: shopY,
+                    ownerId: player.id,
+                    ownerName: player.name,
+                    items: [
+                        { name: '🍎 Elma', desc: '+20 HP', price: 30, effect: 'heal', value: 20 },
+                        { name: '🍇 Üzüm', desc: '+15 HP', price: 25, effect: 'heal', value: 15 },
+                    ],
+                };
+                world.shops.push(shop);
+                player.money -= 500;
+                unlockBadge('shop_owner');
+                showToast(`🏪 ${name} açıldı! -500💰`);
+                addChatMessage('DÜKKAN', `${player.name} bir dükkan açtı: ${name}`, '#ffd966');
+                updateUI();
+                closeModal(shopSetupModal);
+                publishShopUpdate();
+                publishPlayerUpdate();
+            });
+
+            cancelSetupShopBtn.addEventListener('click', () => closeModal(shopSetupModal));
+            closeShopBtn.addEventListener('click', () => closeModal(shopModal));
+
+            function publishShopUpdate() {
+                if (!client || !isConnected || !currentRoom) return;
+                const myShops = world.shops.filter(s => s.ownerId === player.id);
+                client.publish(TOPIC_PREFIX + currentRoom + '/shopUpdate', JSON.stringify({
+                    id: player.id,
+                    shops: myShops,
+                    password: roomPassword || '',
+                }));
+            }
+
+            // ==================== TİCARET ====================
+            function openTradeModal() { openModal(tradeModal); }
+            tradeBtn.addEventListener('click', openTradeModal);
+            mobileTradeBtn.addEventListener('click', openTradeModal);
+            cancelTradeBtn.addEventListener('click', () => closeModal(tradeModal));
+
+            sendTradeBtn.addEventListener('click', () => {
+                const targetName = tradeTargetInput.value.trim();
+                const amount = parseInt(tradeAmountInput.value);
+                if (!targetName || !amount || amount <= 0) { showToast('geçersiz! ❌'); return; }
+                if (amount > player.money) { showToast('yeterli para yok! ❌'); return; }
+                let targetId = null;
+                for (const [id, p] of otherPlayers) {
+                    if (p.name === targetName) { targetId = id; break; }
+                }
+                if (!targetId) { showToast('oyuncu bulunamadı ❌'); return; }
+                player.money -= amount;
+                player.stats.tradeCount++;
+                updateQuestProgress('trade', 1);
+                updateUI();
+                publishTrade({
+                    type:'offer',
+                    from: player.id, fromName: player.name,
+                    to: targetId, amount,
+                });
+                showToast(`💸 ${amount} → ${targetName}`);
+                let xp = 15;
+                if (player.job === 'merchant') xp += 2;
+                addXP(xp);
+                closeModal(tradeModal);
+                publishPlayerUpdate();
+            });
+
+            // ==================== PROFİL ====================
+            function openProfileModal() {
+                profileNameInput.value = player.name;
+                renderCharGrid();
+                renderColorRow(nameColorsEl, NAME_COLORS, player.profile.nameColor, 'nameColor');
+                renderColorRow(shirtColorsEl, SHIRT_COLORS, player.profile.shirtColor, 'shirtColor');
+                renderColorRow(hairColorsEl, HAIR_COLORS, player.profile.hairColor, 'hairColor');
+                renderColorRow(skinColorsEl, SKIN_COLORS, player.profile.skinColor, 'skinColor');
+                openModal(profileModal);
+            }
+
+            function renderColorRow(el, colors, selected, key) {
+                if (!el) return;
+                el.innerHTML = '';
+                colors.forEach(c => {
+                    const sw = document.createElement('div');
+                    sw.className = 'color-swatch' + (c === selected ? ' selected' : '');
+                    sw.style.background = c;
+                    sw.onclick = () => {
+                        player.profile[key] = c;
+                        renderColorRow(el, colors, c, key);
+                    };
+                    el.appendChild(sw);
+                });
+            }
+
+            function renderCharGrid() {
+                charGrid.innerHTML = '';
+                CHARACTERS.forEach((ch, idx) => {
+                    const opt = document.createElement('div');
+                    opt.className = 'char-option' + (idx === player.profile.charId ? ' selected' : '');
+                    const c = document.createElement('canvas');
+                    c.width = 64; c.height = 64;
+                    drawCharacterPreview(c.getContext('2d'), ch, player.profile);
+                    opt.appendChild(c);
+                    opt.onclick = () => {
+                        player.profile.charId = idx;
+                        renderCharGrid();
+                    };
+                    charGrid.appendChild(opt);
+                });
+            }
+
+            profileBtn.addEventListener('click', openProfileModal);
+
+            saveProfileBtn.addEventListener('click', () => {
+                const newName = profileNameInput.value.trim();
+                if (newName.length >= 2) player.name = newName.substr(0, 16);
+                updateUI();
+                closeModal(profileModal);
+                publishPlayerUpdate();
+                saveProfileToLocal();
+                showToast('✅ profil kaydedildi');
+            });
+
+            questBtn.addEventListener('click', openQuestModal);
+            closeQuestBtn.addEventListener('click', () => closeModal(questModal));
+            badgeBtn.addEventListener('click', openBadgeModal);
+            closeBadgeBtn.addEventListener('click', () => closeModal(badgeModal));
+            lbBtn.addEventListener('click', openLbModal);
+            closeLbBtn.addEventListener('click', () => closeModal(lbModal));
+            closeRoomBtn.addEventListener('click', () => closeModal(roomModal));
+
+            // ==================== KARAKTER ÇİZİM ====================
+            function drawChar(ctx, x, y, size, ch, prof, facing, frame, isPlayer, labelText, labelColor) {
+                const px = Math.max(1, Math.floor(size / 10));
+
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.ellipse(x + size / 2, y + size - 1, size / 2.2, px * 1.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                const legOffset = Math.sin(frame * 0.6) * px * 0.7;
+                const bodyColor = prof.shirtColor || '#3498db';
+                const skinColor = prof.skinColor || '#e0ac69';
+                const hairColor = prof.hairColor || '#4a2a1a';
+                const pantsColor = prof.pantsColor || '#2a3a5a';
+
+                ctx.fillStyle = pantsColor;
+                ctx.fillRect(x + size * 0.22, y + size * 0.68, px * 2, px * 3 + legOffset);
+                ctx.fillRect(x + size * 0.58, y + size * 0.68, px * 2, px * 3 - legOffset);
+
+                ctx.fillStyle = '#2a1a0a';
+                ctx.fillRect(x + size * 0.22, y + size * 0.92 + legOffset, px * 2, px);
+                ctx.fillRect(x + size * 0.58, y + size * 0.92 - legOffset, px * 2, px);
+
+                ctx.fillStyle = bodyColor;
+                ctx.fillRect(x + size * 0.18, y + size * 0.38, size * 0.64, size * 0.32);
+
+                if (ch.bodyType === 1) {
+                    ctx.fillStyle = bodyColor;
+                    ctx.fillRect(x + size * 0.15, y + size * 0.62, size * 0.7, size * 0.12);
+                    ctx.fillStyle = '#d4a017';
+                    ctx.fillRect(x + size * 0.18, y + size * 0.55, size * 0.64, px);
+                }
+
+                ctx.fillStyle = skinColor;
+                ctx.fillRect(x + size * 0.06, y + size * 0.4, px * 2, px * 4);
+                ctx.fillRect(x + size * 0.88 - px * 2, y + size * 0.4, px * 2, px * 4);
+
+                ctx.fillStyle = skinColor;
+                ctx.fillRect(x + size * 0.22, y + size * 0.08, size * 0.56, size * 0.32);
+                ctx.fillRect(x + size * 0.18, y + size * 0.2, px, px * 2);
+                ctx.fillRect(x + size * 0.8, y + size * 0.2, px, px * 2);
+
+                ctx.fillStyle = hairColor;
+                if (ch.hairStyle === 0) {
+                    ctx.fillRect(x + size * 0.2, y + size * 0.06, size * 0.6, size * 0.1);
+                } else if (ch.hairStyle === 1) {
+                    ctx.fillRect(x + size * 0.2, y + size * 0.06, size * 0.6, size * 0.12);
+                    ctx.fillRect(x + size * 0.18, y + size * 0.14, px * 2, px * 3);
+                    ctx.fillRect(x + size * 0.8 - px, y + size * 0.14, px * 2, px * 3);
+                } else if (ch.hairStyle === 2) {
+                    ctx.fillRect(x + size * 0.2, y + size * 0.04, size * 0.6, size * 0.14);
+                    ctx.fillRect(x + size * 0.15, y + size * 0.05, px, px * 2);
+                    ctx.fillRect(x + size * 0.85 - px, y + size * 0.05, px, px * 2);
+                } else {
+                    ctx.fillRect(x + size * 0.2, y + size * 0.06, size * 0.6, size * 0.1);
+                    ctx.fillRect(x + size * 0.45, y + size * 0.02, size * 0.1, size * 0.06);
+                }
+
+                if (ch.hasHat) {
+                    ctx.fillStyle = ch.id === 'mage' ? '#5a3a8a' : '#3a4a5a';
+                    ctx.fillRect(x + size * 0.15, y + size * 0.02, size * 0.7, size * 0.08);
+                    if (ch.id === 'mage') {
+                        ctx.beginPath();
+                        ctx.moveTo(x + size * 0.5, y - size * 0.15);
+                        ctx.lineTo(x + size * 0.15, y + size * 0.02);
+                        ctx.lineTo(x + size * 0.85, y + size * 0.02);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+
+                if (facing !== 'up') {
+                    ctx.fillStyle = '#ffffff';
+                    if (facing === 'left') {
+                        ctx.fillRect(x + size * 0.28, y + size * 0.22, px * 2, px * 1.5);
+                        ctx.fillStyle = '#1a1a2a';
+                        ctx.fillRect(x + size * 0.3, y + size * 0.24, px, px);
+                    } else if (facing === 'right') {
+                        ctx.fillRect(x + size * 0.58, y + size * 0.22, px * 2, px * 1.5);
+                        ctx.fillStyle = '#1a1a2a';
+                        ctx.fillRect(x + size * 0.62, y + size * 0.24, px, px);
+                    } else {
+                        ctx.fillRect(x + size * 0.28, y + size * 0.22, px * 2, px * 1.5);
+                        ctx.fillRect(x + size * 0.58, y + size * 0.22, px * 2, px * 1.5);
+                        ctx.fillStyle = '#1a1a2a';
+                        ctx.fillRect(x + size * 0.31, y + size * 0.24, px, px);
+                        ctx.fillRect(x + size * 0.61, y + size * 0.24, px, px);
+                        if (ch.hasBeard) {
+                            ctx.fillStyle = hairColor;
+                            ctx.fillRect(x + size * 0.32, y + size * 0.32, size * 0.36, size * 0.06);
+                        } else {
+                            ctx.fillStyle = '#8a3a3a';
+                            ctx.fillRect(x + size * 0.42, y + size * 0.32, size * 0.16, px);
+                        }
+                    }
+                } else {
+                    ctx.fillStyle = hairColor;
+                    ctx.fillRect(x + size * 0.22, y + size * 0.1, size * 0.56, size * 0.28);
+                }
+
+                if (labelText) {
+                    ctx.font = `bold ${isPlayer ? 12 : 11}px monospace`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    const w = ctx.measureText(labelText).width;
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(x + size / 2 - w / 2 - 3, y - 16, w + 6, 14);
+                    ctx.fillStyle = labelColor || '#ffd966';
+                    ctx.fillText(labelText, x + size / 2, y - 3);
+                }
+            }
+
+            function drawCharacterPreview(c, ch, prof) {
+                c.imageSmoothingEnabled = false;
+                c.fillStyle = '#0e1a2a';
+                c.fillRect(0, 0, c.width, c.height);
+                drawChar(c, 8, 4, 48, ch, prof, 'down', 0, false, '');
+            }
+
+            // ==================== DÜNYA ÜRETİMİ ====================
+            function generateWorld() {
+                // YOLLAR
+                const connections = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];
+                for (const [a, b] of connections) {
+                    const va = world.villages[a], vb = world.villages[b];
+                    world.roads.push({
+                        x1: va.x + va.w / 2, y1: va.y + va.h / 2,
+                        x2: vb.x + vb.w / 2, y2: vb.y + vb.h / 2,
+                        width: 36,
+                    });
+                }
+
+                // AĞAÇLAR (elma verir)
+                for (let i = 0; i < 320; i++) {
+                    const x = Math.floor(Math.random() * (WORLD_W - 80)) + 40;
+                    const y = Math.floor(Math.random() * (WORLD_H - 80)) + 40;
+                    let skip = false;
+                    for (const v of world.villages) {
+                        if (x > v.x - 40 && x < v.x + v.w + 40 && y > v.y - 40 && y < v.y + v.h + 40) { skip = true; break; }
+                    }
+                    if (!skip) for (const r of world.roads) {
+                        if (distToSegment(x, y, r.x1, r.y1, r.x2, r.y2) < 50) { skip = true; break; }
+                    }
+                    if (!skip) world.trees.push({
+                        x, y,
+                        size: 28 + Math.random() * 22,
+                        lastApple: 0,
+                        appleChance: Math.random(),  // 0-1 arası, ne kadar düşükse o kadar çok elma
+                    });
+                }
+
+                // KAYALAR
+                for (let i = 0; i < 80; i++) {
+                    const x = Math.floor(Math.random() * (WORLD_W - 60)) + 30;
+                    const y = Math.floor(Math.random() * (WORLD_H - 60)) + 30;
+                    let skip = false;
+                    for (const v of world.villages) {
+                        if (x > v.x - 40 && x < v.x + v.w + 40 && y > v.y - 40 && y < v.y + v.h + 40) { skip = true; break; }
+                    }
+                    if (!skip) world.rocks.push({ x, y, size: 16 + Math.random() * 16 });
+                }
+
+                // HANLAR
+                for (const v of world.villages) {
+                    world.inns.push({
+                        x: v.x + v.w / 2,
+                        y: v.y + v.h / 2,
+                        village: v, healCost: 20,
+                    });
+                }
+
+                // İŞ BÖLGELERİ
+                world.workZones.push(
+                    { id:'mine', name:'Maden Ocağı', icon:'⛏️', x:1050, y:2100, radius:100, minPay:15, maxPay:35, hpCost:8, cooldown:5000, color:'#4a3a3a', lastUsed:0 },
+                    { id:'farm', name:'Çiftlik', icon:'🌾', x:1050, y:800, radius:100, minPay:10, maxPay:25, hpCost:5, cooldown:3500, color:'#4a5a2a', lastUsed:0 },
+                    { id:'fishing', name:'Balık Göleti', icon:'🎣', x:2400, y:1500, radius:100, minPay:20, maxPay:40, hpCost:6, cooldown:4500, color:'#2a4a6a', lastUsed:0 },
+                    { id:'lumber', name:'Oduncu Kampı', icon:'🪓', x:2700, y:500, radius:100, minPay:12, maxPay:28, hpCost:7, cooldown:4000, color:'#3a4a2a', lastUsed:0 },
+                );
+
+                // SANDIKLAR
+                for (let i = 0; i < 10; i++) {
+                    let x, y, inV, attempts = 0;
+                    do {
+                        x = Math.floor(Math.random() * (WORLD_W - 200)) + 100;
+                        y = Math.floor(Math.random() * (WORLD_H - 200)) + 100;
+                        inV = false;
+                        for (const v of world.villages) {
+                            if (x > v.x - 50 && x < v.x + v.w + 50 && y > v.y - 50 && y < v.y + v.h + 50) { inV = true; break; }
+                        }
+                        attempts++;
+                    } while (inV && attempts < 20);
+                    world.chests.push({
+                        x, y, minGold:50, maxGold:150,
+                        opened:false, respawnTimer:0,
+                    });
+                }
+
+                // SOKAK LAMBALARI (köylerin ve yolların çevresine)
+                for (const v of world.villages) {
+                    // Köşelerde ve ortada
+                    const positions = [
+                        { x: v.x + 20, y: v.y + 20 },
+                        { x: v.x + v.w - 20, y: v.y + 20 },
+                        { x: v.x + 20, y: v.y + v.h - 20 },
+                        { x: v.x + v.w - 20, y: v.y + v.h - 20 },
+                        { x: v.x + v.w / 2, y: v.y + 15 },
+                        { x: v.x + v.w / 2, y: v.y + v.h - 15 },
+                    ];
+                    for (const p of positions) {
+                        world.streetLights.push({ x:p.x, y:p.y });
+                    }
+                }
+                // Yol lambaları
+                for (const r of world.roads) {
+                    const steps = Math.floor(Math.hypot(r.x2 - r.x1, r.y2 - r.y1) / 250);
+                    for (let i = 1; i < steps; i++) {
+                        const t = i / steps;
+                        world.streetLights.push({
+                            x: r.x1 + (r.x2 - r.x1) * t,
+                            y: r.y1 + (r.y2 - r.y1) * t,
+                        });
+                    }
+                }
+
+                // NPC'LER
+                const npcNames = ['Tüccar Ali','Çiftçi Ayşe','Demirci Mehmet','Balıkçı Zeynep','Gezgin Can','Şifacı Elif','Avcı Murat','Madenci Kemal','Ozan Deniz','Bekçi Hasan','Kaptan Rıza','Terzi Nur'];
+                const dialogues = [
+                    ['Merhaba gezgin!','Bugün hava güzel.','Ticaret yapmak ister misin?','Köyümüze hoş geldin!'],
+                    ['Ee, ne haber?','Yoruldum bugün.','Bir çay içer misin?','İyi yolculuklar!'],
+                    ['Bu topraklar verimli.','Madenlerde çalışıyorum.','Şehre gidiyor musun?','Dikkatli ol!'],
+                    ['Elmalar bu aralar çok düşüyor.','Yangın çıkarsa itfaiye çağır!','Dükkan açmak ister misin?'],
+                    ['Görevler sekmesini kontrol et!','Rozet topluyor musun?','Meslek sahibi olmayı dene.'],
+                ];
+                for (let i = 0; i < 40; i++) {
+                    const v = world.villages[i % world.villages.length];
+                    world.npcs.push({
+                        id:'npc_' + i,
+                        name:npcNames[i % npcNames.length],
+                        x: v.x + 60 + Math.random() * (v.w - 120),
+                        y: v.y + 60 + Math.random() * (v.h - 120),
+                        vx:(Math.random() - 0.5) * 1.2,
+                        vy:(Math.random() - 0.5) * 1.2,
+                        color:`hsl(${Math.random() * 60 + 20}, 70%, 55%)`,
+                        village:v, moveTimer:0,
+                        dialogue:dialogues[Math.floor(Math.random() * dialogues.length)],
+                    });
+                }
+            }
+
+            function distToSegment(px, py, x1, y1, x2, y2) {
+                const dx = x2 - x1, dy = y2 - y1;
+                const len2 = dx * dx + dy * dy;
+                if (len2 === 0) return Math.hypot(px - x1, py - y1);
+                let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+                t = Math.max(0, Math.min(1, t));
+                return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+            }
+
+            generateWorld();
+
+            // ==================== YANGIN SİSTEMİ ====================
+            let nextFireCheck = 0;
+            function spawnFire() {
+                // Rastgele bir yerde yangın çıksın (köy yakını)
+                const v = world.villages[Math.floor(Math.random() * world.villages.length)];
+                const fx = v.x + (Math.random() - 0.3) * v.w;
+                const fy = v.y + (Math.random() - 0.3) * v.h;
+                world.fires.push({
+                    id:'fire_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    x:fx, y:fy,
+                    size: 30 + Math.random() * 20,
+                    createdAt: Date.now(),
+                    extinguished: false,
+                    extinguishTimer: 0,
+                    spreadTimer: 0,
+                    radius: 40,
+                });
+                showToast('🔥 Yangın çıktı! İtfaiyeci çağır!', 2500);
+                addChatMessage('YANGIN', '🔥 bir yangın çıktı! itfaiyeciler söndürsün!', '#ff8a3a');
+            }
+
+            function updateFires(dt) {
+                // Otomatik yangın
+                nextFireCheck -= dt;
+                if (nextFireCheck <= 0) {
+                    nextFireCheck = 30000 + Math.random() * 60000; // 30-90 saniye
+                    if (world.fires.filter(f => !f.extinguished).length < 3) {
+                        spawnFire();
+                        publishFire();
+                    }
+                }
+                // Yangınların güncellenmesi
+                for (const f of world.fires) {
+                    if (f.extinguished) {
+                        f.extinguishTimer -= dt;
+                        if (f.extinguishTimer <= 0) {
+                            const idx = world.fires.indexOf(f);
+                            if (idx >= 0) world.fires.splice(idx, 1);
+                        }
+                    }
+                }
+                // Yangın uyarısı göster
+                const active = world.fires.filter(f => !f.extinguished);
+                fireWarning.classList.toggle('active', active.length > 0);
+                if (active.length > 0) {
+                    fireWarning.textContent = `🔥 ${active.length} YANGIN! İtfaiyeci çağır!`;
+                }
+            }
+
+            function publishFire() {
+                if (!client || !isConnected || !currentRoom) return;
+                const active = world.fires.filter(f => !f.extinguished);
+                client.publish(TOPIC_PREFIX + currentRoom + '/fire', JSON.stringify({
+                    id: player.id,
+                    fires: active.map(f => ({ id:f.id, x:f.x, y:f.y, size:f.size })),
+                    password: roomPassword || '',
+                }));
+            }
+
+            // ==================== MQTT ====================
+            function connectMQTT(room, password, roomName) {
+                if (client) { try { client.end(true); } catch(e){} client = null; }
+                if (typeof mqtt === 'undefined') {
+                    roomStatus.textContent = '❌ MQTT yüklenemedi';
+                    return;
+                }
+                isConnected = false;
+                roomStatus.textContent = 'bağlanıyor: ' + (roomName || room);
+                statusEl.textContent = '🔌 bağlanıyor...';
+                setConnectionStatus('🔌 Bağlanıyor...', false);
+                const clientId = 'pixel_' + player.id + '_' + Math.random().toString(36).substr(2, 6);
+                try {
+                    client = mqtt.connect(BROKER_URL, {
+                        clientId, clean:true, connectTimeout:15000,
+                        reconnectPeriod:3000, keepalive:30, protocolVersion:4,
+                    });
+                } catch (e) {
+                    roomStatus.textContent = '❌ ' + e.message;
+                    return;
+                }
+
+                client.on('connect', () => {
+                    isConnected = true;
+                    currentRoom = room;
+                    roomPassword = password;
+                    statusEl.textContent = '🟢 ' + room;
+                    setConnectionStatus('✅ Bağlandı!', true);
+
+                    // Lobiye katıl
+                    client.subscribe(LOBBY_TOPIC, { qos: 0 });
+                    client.subscribe(TOPIC_PREFIX + room + '/#', { qos: 0 }, (err) => {
+                        if (err) { roomStatus.textContent = '❌ abone hatası'; return; }
+                        roomStatus.textContent = '✅ ' + (roomName || room);
+                        // Odayı lobiye duyur
+                        client.publish(LOBBY_TOPIC, JSON.stringify({
+                            type:'room_announce',
+                            id: player.id,
+                            roomId: room,
+                            name: roomName || room,
+                            hasPassword: !!password,
+                            count: 1,
+                            ts: Date.now(),
+                        }));
+                        publishPlayerUpdate();
+                        client.publish(TOPIC_PREFIX + room + '/requestPlayers', JSON.stringify({
+                            from: player.id, name: player.name, password: password || ''
+                        }));
+                        addChatMessage('SİSTEM', 'odaya katıldın: ' + (roomName || room), '#ffd966');
+                        closeModal(roomModal);
+                        showToast('🎮 ' + (roomName || room) + ' odasına katıldın!');
+                    });
+                });
+
+                client.on('message', (topic, message) => {
+                    try { handleMQTTMessage(topic, JSON.parse(message.toString())); } catch(e) {}
+                });
+                client.on('error', (err) => {
+                    statusEl.textContent = '🔴 hata';
+                    roomStatus.textContent = '❌ ' + (err.message || err);
+                });
+                client.on('offline', () => { isConnected = false; statusEl.textContent = '🟡 çevrimdışı'; });
+                client.on('reconnect', () => { statusEl.textContent = '🔄 bağlanıyor...'; });
+            }
+
+            function handleMQTTMessage(topic, data) {
+                // Lobi
+                if (topic === LOBBY_TOPIC) {
+                    if (data.type === 'room_announce') {
+                        activeRooms.set(data.roomId, {
+                            roomId: data.roomId,
+                            name: data.name,
+                            hasPassword: data.hasPassword,
+                            count: data.count,
+                            lastSeen: Date.now(),
+                        });
+                        renderRoomLists();
+                    } else if (data.type === 'room_request') {
+                        if (currentRoom) {
+                            client.publish(LOBBY_TOPIC, JSON.stringify({
+                                type:'room_announce',
+                                id: player.id,
+                                roomId: currentRoom,
+                                name: document.getElementById('roomNameInput')?.value || currentRoom,
+                                hasPassword: !!roomPassword,
+                                count: otherPlayers.size + 1,
+                                ts: Date.now(),
+                            }));
+                        }
+                    }
+                    return;
+                }
+                if (!currentRoom) return;
+                const base = TOPIC_PREFIX + currentRoom;
+                if (roomPassword && data.password && data.password !== roomPassword) return;
+
+                if (topic === base + '/playerUpdate') {
+                    if (data.id === player.id) return;
+                    if (!otherPlayers.has(data.id)) {
+                        otherPlayers.set(data.id, {
+                            id: data.id, name: data.name, x: data.x, y: data.y,
+                            color: data.color, hp: data.hp, money: data.money, level: data.level || 1,
+                            job: data.job || 'none',
+                            facing: data.facing || 'down',
+                            profile: data.profile || { charId:0, shirtColor:'#8a4a6a', hairColor:'#2a1a0a', skinColor:'#e0ac69', pantsColor:'#2a3a5a', nameColor:'#ffa0ff' },
+                            animFrame:0, animTimer:0, lastUpdate:Date.now(),
+                        });
+                        addChatMessage('SİSTEM', data.name + ' katıldı', '#a0e0a0');
+                    } else {
+                        const p = otherPlayers.get(data.id);
+                        Object.assign(p, {
+                            x:data.x, y:data.y, name:data.name, hp:data.hp,
+                            money:data.money, level:data.level || 1, job:data.job || 'none',
+                            facing:data.facing || 'down', lastUpdate:Date.now(),
+                        });
+                        if (data.profile) p.profile = data.profile;
+                    }
+                }
+                else if (topic === base + '/chat') {
+                    if (data.id === player.id) return;
+                    addChatMessage(data.name, data.text, data.nameColor || '#b0d0ff');
+                    chatBox.classList.add('active');
+                }
+                else if (topic === base + '/trade') {
+                    if (data.to === player.id) {
+                        if (data.type === 'offer' || data.type === 'shop_purchase') {
+                            const amount = data.amount;
+                            player.money += amount;
+                            updateUI();
+                            if (data.type === 'offer') {
+                                showToast(`💰 +${amount} aldın!`);
+                                addChatMessage('TİCARET', `${data.fromName} +${amount}💰 gönderdi`, '#ffd966');
+                                publishTrade({ type:'accept', from:player.id, fromName:player.name, to:data.from, amount });
+                            } else {
+                                showToast(`💰 Dükkan satışı: +${amount}`);
+                                addChatMessage('DÜKKAN', `${data.fromName} dükkanından alışveriş yaptı: +${amount}💰`, '#6ae8c4');
+                            }
+                            checkRichBadges();
+                        } else if (data.type === 'accept') {
+                            addChatMessage('TİCARET', `${data.fromName} parayı aldı ✅`, '#a0e0a0');
+                        }
+                    }
+                }
+                else if (topic === base + '/friendRequest') {
+                    if (data.to === player.id && !player.friends.includes(data.fromName)) {
+                        player.friends.push(data.fromName);
+                        player.stats.friendCount++;
+                        updateQuestProgress('friend', 1);
+                        updateUI();
+                        addChatMessage('ARKADAŞ', `${data.fromName} seni ekledi`, '#ffa0ff');
+                        showToast('👥 ' + data.fromName + ' arkadaşın oldu!');
+                        addXP(25);
+                        unlockBadge('first_friend');
+                        client.publish(base + '/friendAccept', JSON.stringify({
+                            from:player.id, fromName:player.name, to:data.from, password:roomPassword || ''
+                        }));
+                    }
+                }
+                else if (topic === base + '/friendAccept') {
+                    if (data.to === player.id && !player.friends.includes(data.fromName)) {
+                        player.friends.push(data.fromName);
+                        updateUI();
+                        showToast('👥 ' + data.fromName + ' arkadaşın oldu!');
+                    }
+                }
+                else if (topic === base + '/requestPlayers') {
+                    if (data.from === player.id) return;
+                    client.publish(base + '/playerUpdate', JSON.stringify({
+                        id:player.id, name:player.name, x:player.x, y:player.y,
+                        color:player.color, hp:player.hp, money:player.money, level:player.level,
+                        job:player.job, facing:player.facing, profile:player.profile,
+                        password:roomPassword || '',
+                    }));
+                }
+                else if (topic === base + '/playerLeave') {
+                    if (data.id === player.id) return;
+                    if (otherPlayers.has(data.id)) {
+                        addChatMessage('SİSTEM', otherPlayers.get(data.id).name + ' ayrıldı', '#ffa0a0');
+                        otherPlayers.delete(data.id);
+                    }
+                }
+                else if (topic === base + '/shopUpdate') {
+                    if (data.id === player.id) return;
+                    // Diğer oyuncuların dükkanlarını ekle
+                    if (data.shops && Array.isArray(data.shops)) {
+                        for (const shop of data.shops) {
+                            const existing = world.shops.findIndex(s => s.id === shop.id);
+                            if (existing >= 0) world.shops[existing] = shop;
+                            else world.shops.push(shop);
+                        }
+                    }
+                }
+                else if (topic === base + '/fire') {
+                    if (data.id === player.id) return;
+                    // Diğer oyuncuların yangınlarını ekle
+                    if (data.fires && Array.isArray(data.fires)) {
+                        for (const f of data.fires) {
+                            if (!world.fires.find(x => x.id === f.id)) {
+                                world.fires.push({
+                                    id:f.id, x:f.x, y:f.y, size:f.size,
+                                    createdAt:Date.now(),
+                                    extinguished:false,
+                                    extinguishTimer:0,
+                                    radius:40,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            function publishPlayerUpdate() {
+                if (!client || !isConnected || !currentRoom) return;
+                try {
+                    client.publish(TOPIC_PREFIX + currentRoom + '/playerUpdate', JSON.stringify({
+                        id:player.id, name:player.name, x:player.x, y:player.y,
+                        color:player.color, hp:player.hp, money:player.money, level:player.level,
+                        job:player.job, facing:player.facing, profile:player.profile,
+                        password:roomPassword || '',
+                    }));
+                } catch(e) {}
+            }
+            function publishChat(text) {
+                if (!client || !isConnected || !currentRoom) return;
+                client.publish(TOPIC_PREFIX + currentRoom + '/chat', JSON.stringify({
+                    id:player.id, name:player.name, text,
+                    nameColor:player.profile.nameColor,
+                    password:roomPassword || '',
+                }));
+            }
+            function publishTrade(data) {
+                if (!client || !isConnected || !currentRoom) return;
+                data.password = roomPassword || '';
+                client.publish(TOPIC_PREFIX + currentRoom + '/trade', JSON.stringify(data));
+            }
+            function publishFriendRequest(toId, toName) {
+                if (!client || !isConnected || !currentRoom) return;
+                client.publish(TOPIC_PREFIX + currentRoom + '/friendRequest', JSON.stringify({
+                    from:player.id, fromName:player.name, to:toId, toName,
+                    password:roomPassword || '',
+                }));
+            }
+            function publishPlayerLeave() {
+                if (!client || !isConnected || !currentRoom) return;
+                try {
+                    client.publish(TOPIC_PREFIX + currentRoom + '/playerLeave', JSON.stringify({
+                        id:player.id, password:roomPassword || '',
+                    }));
+                } catch(e) {}
+            }
+
+            // ==================== ODA LİSTESİ ====================
+            function renderRoomLists() {
+                const now = Date.now();
+                // Eski odaları temizle (30sn)
+                for (const [id, r] of activeRooms) {
+                    if (now - r.lastSeen > 30000) activeRooms.delete(id);
+                }
+                const rooms = Array.from(activeRooms.values()).sort((a, b) => b.lastSeen - a.lastSeen);
+
+                const html = rooms.length === 0
+                    ? '<div style="color:#6a8aaa;font-size:10px;">şu an aktif oda yok</div>'
+                    : '';
+                
+                // Top-right liste
+                roomListEl.innerHTML = '<div class="title">📋 Aktif Odalar</div>';
+                if (rooms.length === 0) {
+                    roomListEl.innerHTML += '<div style="color:#6a8aaa;font-size:10px;">aktif oda yok</div>';
+                } else {
+                    rooms.forEach(r => {
+                        const el = document.createElement('div');
+                        el.className = 'room-item';
+                        el.innerHTML = `
+                            <div class="name">${r.hasPassword ? '🔒' : '🔓'} ${r.name}</div>
+                            <div class="count">${r.count}👤</div>
+                        `;
+                        el.onclick = () => tryJoinRoom(r);
+                        roomListEl.appendChild(el);
+                    });
+                }
+
+                // Modal liste
+                if (modalRoomList) {
+                    modalRoomList.innerHTML = '';
+                    if (rooms.length === 0) {
+                        modalRoomList.innerHTML = '<div style="color:#6a8aaa;font-size:11px;">şu an aktif oda yok</div>';
+                    } else {
+                        rooms.forEach(r => {
+                            const el = document.createElement('div');
+                            el.className = 'room-item';
+                            el.innerHTML = `
+                                <div class="name">${r.hasPassword ? '🔒' : '🔓'} ${r.name}</div>
+                                <div class="count">${r.count}👤</div>
+                            `;
+                            el.onclick = () => tryJoinRoom(r);
+                            modalRoomList.appendChild(el);
+                        });
+                    }
+                }
+            }
+
+            function tryJoinRoom(r) {
+                if (r.hasPassword) {
+                    pwInput.value = '';
+                    pwModal.dataset.roomId = r.roomId;
+                    pwModal.dataset.roomName = r.name;
+                    openModal(pwModal);
+                } else {
+                    connectMQTT(r.roomId, '', r.name);
+                    closeModal(roomModal);
+                }
+            }
+
+            pwOkBtn.addEventListener('click', () => {
+                const pw = pwInput.value;
+                const roomId = pwModal.dataset.roomId;
+                const roomName = pwModal.dataset.roomName;
+                closeModal(pwModal);
+                connectMQTT(roomId, pw, roomName);
+            });
+            pwCancelBtn.addEventListener('click', () => closeModal(pwModal));
+
+            // ==================== ODA KURMA ====================
+            function getRoomId(name) {
+                return name.toLowerCase().replace(/[^a-z0-9-_]/g, '').substr(0, 25) || 'genel';
+            }
+            createRoomBtn.addEventListener('click', () => {
+                const name = roomNameInput.value.trim() || 'piksel-dunyasi';
+                const pw = roomPasswordInput.value;
+                const roomId = getRoomId(name) + '_' + Math.random().toString(36).substr(2, 5);
+                connectMQTT(roomId, pw, name);
+            });
+            joinRoomBtn.addEventListener('click', () => {
+                const name = roomNameInput.value.trim() || 'piksel-dunyasi';
+                const pw = roomPasswordInput.value;
+                const roomId = getRoomId(name);
+                connectMQTT(roomId, pw, name);
+            });
+
+            // ==================== ŞEHİR ZİYARETİ ====================
+            let lastCityCheck = '';
+            function checkCityVisit() {
+                for (const v of world.villages) {
+                    if (player.x > v.x && player.x < v.x + v.w && player.y > v.y && player.y < v.y + v.h) {
+                        if (lastCityCheck !== v.name) {
+                            lastCityCheck = v.name;
+                        }
+                        if (!player.stats.citiesVisited.includes(v.name)) {
+                            player.stats.citiesVisited.push(v.name);
+                            showToast(`🗺️ Keşfedildi: ${v.name}`, 2000);
+                            addChatMessage('KEŞİF', `${v.name} keşfedildi! (${player.stats.citiesVisited.length}/4)`, '#6ae8c4');
+                            addXP(50);
+                            for (const q of QUEST_DEFS) {
+                                if (q.goal.type === 'visit_city') {
+                                    const p = player.quests[q.id];
+                                    if (p && !p.claimed) p.progress = player.stats.citiesVisited.length;
+                                }
+                            }
+                            if (player.stats.citiesVisited.length >= 4) unlockBadge('explorer');
+                            saveProfileToLocal();
+                        }
+                    }
+                }
+            }
+
+            // ==================== ZAMAN SİSTEMİ ====================
+            function updateTime(dt) {
+                gameTime.timeOfDay += gameTime.speed * dt;
+                if (gameTime.timeOfDay >= 1) {
+                    gameTime.timeOfDay -= 1;
+                    gameTime.day++;
+                    showToast(`🌅 Gün ${gameTime.day} başladı!`, 2000);
+                }
+                // Saat göster
+                const totalMinutes = gameTime.timeOfDay * 24 * 60;
+                const h = Math.floor(totalMinutes / 60);
+                const m = Math.floor(totalMinutes % 60);
+                clockTime.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+                clockDay.textContent = gameTime.day;
+                // Ikon
+                const hour = gameTime.timeOfDay * 24;
+                if (hour >= 6 && hour < 8) clockIcon.textContent = '🌅';
+                else if (hour >= 8 && hour < 18) clockIcon.textContent = '☀️';
+                else if (hour >= 18 && hour < 20) clockIcon.textContent = '🌇';
+                else clockIcon.textContent = '🌙';
+            }
+
+            // Gece kararma faktörü (0 = tam gündüz, 1 = tam gece)
+            function getNightFactor() {
+                const h = gameTime.timeOfDay * 24;
+                if (h >= 7 && h < 18) return 0;
+                if (h >= 18 && h < 20) return (h - 18) / 2;   // gündüz->gece
+                if (h >= 20 || h < 5) return 1;                // tam gece
+                if (h >= 5 && h < 7) return 1 - (h - 5) / 2;   // gece->gündüz
+                return 0;
+            }
+
+            // ==================== GÜNCELLEME ====================
+            function update(dt) {
+                let dx = 0, dy = 0;
+                if (keys['w'] || keys['arrowup']) dy -= 1;
+                if (keys['s'] || keys['arrowdown']) dy += 1;
+                if (keys['a'] || keys['arrowleft']) dx -= 1;
+                if (keys['d'] || keys['arrowright']) dx += 1;
+                if (joyState.active) { dx += joyState.dx; dy += joyState.dy; }
+
+                const mag = Math.hypot(dx, dy);
+                if (mag > 0.1) {
+                    dx /= mag; dy /= mag;
+                    const speedMul = Math.min(1, mag);
+                    player.x += dx * MOVE_SPEED * speedMul;
+                    player.y += dy * MOVE_SPEED * speedMul;
+                    if (Math.abs(dx) > Math.abs(dy)) player.facing = dx > 0 ? 'right' : 'left';
+                    else player.facing = dy > 0 ? 'down' : 'up';
+                    player.animTimer += dt;
+                    if (player.animTimer > 140) {
+                        player.animTimer = 0;
+                        player.animFrame = (player.animFrame + 1) % 4;
+                    }
+                } else {
+                    player.animFrame = 0;
+                }
+
+                player.x = Math.max(PLAYER_SIZE / 2, Math.min(WORLD_W - PLAYER_SIZE / 2, player.x));
+                player.y = Math.max(PLAYER_SIZE / 2, Math.min(WORLD_H - PLAYER_SIZE / 2, player.y));
+
+                const tx = player.x - CANVAS_W / 2;
+                const ty = player.y - CANVAS_H / 2;
+                camera.x += (tx - camera.x) * 0.12;
+                camera.y += (ty - camera.y) * 0.12;
+                camera.x = Math.max(0, Math.min(WORLD_W - CANVAS_W, camera.x));
+                camera.y = Math.max(0, Math.min(WORLD_H - CANVAS_H, camera.y));
+
+                // Zaman
+                updateTime(dt);
+
+                // NPC
+                for (const npc of world.npcs) {
+                    npc.moveTimer -= dt;
+                    if (npc.moveTimer <= 0) {
+                        npc.moveTimer = 2000 + Math.random() * 3000;
+                        npc.vx = (Math.random() - 0.5) * 1.5;
+                        npc.vy = (Math.random() - 0.5) * 1.5;
+                    }
+                    npc.x += npc.vx;
+                    npc.y += npc.vy;
+                    if (npc.x < npc.village.x + 20 || npc.x > npc.village.x + npc.village.w - 20) npc.vx *= -1;
+                    if (npc.y < npc.village.y + 20 || npc.y > npc.village.y + npc.village.h - 20) npc.vy *= -1;
+                }
+
+                // Ağaçlardan elma düşmesi
+                for (const t of world.trees) {
+                    t.lastApple -= dt;
+                    if (t.lastApple <= 0) {
+                        t.lastApple = 20000 + Math.random() * 30000;
+                        // Elma düşme şansı
+                        if (Math.random() < 0.6) {
+                            world.apples.push({
+                                x: t.x + (Math.random() - 0.5) * 30,
+                                y: t.y + t.size * 0.3,
+                                heal: 10 + Math.floor(Math.random() * 10),
+                                collected: false,
+                                createdAt: Date.now(),
+                            });
+                        }
+                    }
+                }
+                // Eski elmaları temizle (60sn)
+                const now = Date.now();
+                for (let i = world.apples.length - 1; i >= 0; i--) {
+                    const a = world.apples[i];
+                    if (a.collected || now - a.createdAt > 90000) {
+                        world.apples.splice(i, 1);
+                    }
+                }
+
+                // Diğer oyuncu anim
+                for (const p of otherPlayers.values()) {
+                    p.animTimer = (p.animTimer || 0) + dt;
+                    if (p.animTimer > 140) {
+                        p.animTimer = 0;
+                        p.animFrame = (p.animFrame + 1) % 4;
+                    }
+                }
+
+                // Yangınlar
+                updateFires(dt);
+
+                // Can yenilenme
+                if (Date.now() - player.lastRegenTime > 30000 && player.hp < 100) {
+                    player.hp = Math.min(100, player.hp + 1);
+                    player.lastRegenTime = Date.now();
+                    updateUI();
+                }
+                if (mag > 0.1) player.lastMoveTime = Date.now();
+                else {
+                    const idle = Date.now() - player.lastMoveTime;
+                    if (idle > 5000 && player.hp < 100) {
+                        if (!player._restTimer) player._restTimer = Date.now();
+                        if (Date.now() - player._restTimer > 2000) {
+                            player.hp = Math.min(100, player.hp + 2);
+                            player._restTimer = Date.now();
+                            updateUI();
+                        }
+                    }
+                }
+
+                // Günlük bonus
+                const DAY_MS = 24 * 60 * 60 * 1000;
+                if (Date.now() - (player.lastDailyBonus || 0) > DAY_MS) {
+                    player.lastDailyBonus = Date.now();
+                    player.money += 50;
+                    updateUI();
+                    showToast('🎁 Günlük bonus: +50 💰!');
+                    addChatMessage('SİSTEM', '🎁 günlük bonusunu aldın: +50 💰', '#ffd966');
+                }
+
+                // Şehir kontrolü
+                checkCityVisit();
+
+                // Etkileşim ipucu
+                let hint = null;
+                let hintDist = INTERACT_RANGE;
+                // Yangın
+                if (player.job === 'firefighter') {
+                    for (const f of world.fires) {
+                        if (f.extinguished) continue;
+                        const d = Math.hypot(f.x - player.x, f.y - player.y);
+                        if (d < 100) { hint = '🚒 E: yangını söndür!'; hintDist = d; break; }
+                    }
+                }
+                // Elma
+                if (!hint) for (const food of world.foods) {
+                    if (!food.active) continue;
+                    const d = Math.hypot(food.x - player.x, food.y - player.y);
+                    if (d < hintDist) { hint = `🍎 E: topla (+${food.heal}HP)`; hintDist = d; }
+                }
+                if (!hint) for (const apple of world.apples) {
+                    if (apple.collected) continue;
+                    const d = Math.hypot(apple.x - player.x, apple.y - player.y);
+                    if (d < hintDist) { hint = `🍎 E: elma topla (+${apple.heal}HP)`; hintDist = d; }
+                }
+                // Sandık
+                if (!hint) for (const c of world.chests) {
+                    if (c.opened) continue;
+                    const d = Math.hypot(c.x - player.x, c.y - player.y);
+                    if (d < hintDist) { hint = '💎 E: sandığı aç'; hintDist = d; }
+                }
+                // Dükkan
+                if (!hint) for (const s of world.shops) {
+                    const d = Math.hypot(s.x - player.x, s.y - player.y);
+                    if (d < hintDist) { hint = `🏪 E: ${s.name} (${s.ownerName})`; hintDist = d; }
+                }
+                // Han
+                if (!hint) for (const inn of world.inns) {
+                    const d = Math.hypot(inn.x - player.x, inn.y - player.y);
+                    if (d < hintDist) { hint = `🏠 E: han (${inn.healCost}💰)`; hintDist = d; }
+                }
+                // NPC
+                if (!hint) for (const npc of world.npcs) {
+                    const d = Math.hypot(npc.x - player.x, npc.y - player.y);
+                    if (d < hintDist) { hint = `💬 E: ${npc.name}`; hintDist = d; }
+                }
+                // İş bölgesi
+                if (!hint) for (const z of world.workZones) {
+                    const d = Math.hypot(z.x - player.x, z.y - player.y);
+                    if (d < z.radius) { hint = `${z.icon} ${z.name} — Q ile çalış`; break; }
+                }
+                interactHint.style.display = hint ? 'block' : 'none';
+                if (hint) interactHint.textContent = hint;
+
+                // Yayın
+                if (!update._last || Date.now() - update._last > 100) {
+                    update._last = Date.now();
+                    publishPlayerUpdate();
+                }
+            }
+
+            // ==================== ÇİZİM ====================
+            function drawTree(ctx, tree, camX, camY) {
+                const x = tree.x - camX, y = tree.y - camY;
+                ctx.fillStyle = '#5a3a2a';
+                ctx.fillRect(x - 4, y + 4, 8, 18);
+                const s = tree.size;
+                ctx.fillStyle = '#2a6a2a';
+                ctx.fillRect(x - s * 0.5, y - s * 0.3, s, s * 0.7);
+                ctx.fillStyle = '#3a8a3a';
+                ctx.fillRect(x - s * 0.4, y - s * 0.5, s * 0.8, s * 0.5);
+                ctx.fillStyle = '#4a9a4a';
+                ctx.fillRect(x - s * 0.25, y - s * 0.6, s * 0.5, s * 0.3);
+                // Küçük elmalar ağaçta
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath(); ctx.arc(x - 5, y - 5, 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(x + 6, y - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(x + 2, y - 10, 2.5, 0, Math.PI * 2); ctx.fill();
+            }
+
+            function drawRock(ctx, rock, camX, camY) {
+                const x = rock.x - camX, y = rock.y - camY;
+                const s = rock.size;
+                ctx.fillStyle = '#6a6a7a';
+                ctx.fillRect(x - s / 2, y - s / 2, s, s);
+                ctx.fillStyle = '#8a8a9a';
+                ctx.fillRect(x - s / 2 + 3, y - s / 2 + 3, s * 0.4, s * 0.4);
+                ctx.fillStyle = '#4a4a5a';
+                ctx.fillRect(x - s / 2, y + s / 2 - 4, s, 4);
+            }
+
+            function drawVillage(ctx, v, camX, camY) {
+                const x = v.x - camX, y = v.y - camY;
+                ctx.fillStyle = v.color;
+                ctx.fillRect(x, y, v.w, v.h);
+                ctx.fillStyle = '#6a5a4a';
+                ctx.fillRect(x + 20, y + v.h / 2 - 15, v.w - 40, 30);
+                ctx.fillRect(x + v.w / 2 - 15, y + 20, 30, v.h - 40);
+                const bCount = 6;
+                for (let i = 0; i < bCount; i++) {
+                    const bx = x + 40 + (i * (v.w - 100) / bCount);
+                    const by = y + 30 + ((i % 2) * 40);
+                    const bw = 60, bh = 50;
+                    ctx.fillStyle = '#d4b896';
+                    ctx.fillRect(bx, by + 15, bw, bh - 15);
+                    ctx.fillStyle = v.roofColor;
+                    ctx.beginPath();
+                    ctx.moveTo(bx - 5, by + 15);
+                    ctx.lineTo(bx + bw / 2, by - 10);
+                    ctx.lineTo(bx + bw + 5, by + 15);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#5a3a2a';
+                    ctx.fillRect(bx + bw / 2 - 8, by + bh - 15, 16, 15);
+                    ctx.fillStyle = '#ffd96680';
+                    ctx.fillRect(bx + 8, by + 25, 12, 12);
+                    ctx.fillRect(bx + bw - 20, by + 25, 12, 12);
+                }
+                ctx.fillStyle = 'rgba(30,42,58,0.9)';
+                ctx.fillRect(x + v.w / 2 - 60, y - 22, 120, 20);
+                ctx.fillStyle = '#ffd966';
+                ctx.font = 'bold 13px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🏘 ' + v.name, x + v.w / 2, y - 12);
+            }
+
+            function drawRoad(ctx, r, camX, camY) {
+                ctx.strokeStyle = '#4a3a2a';
+                ctx.lineWidth = r.width + 6;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(r.x1 - camX, r.y1 - camY);
+                ctx.lineTo(r.x2 - camX, r.y2 - camY);
+                ctx.stroke();
+                ctx.strokeStyle = '#8a7a6a';
+                ctx.lineWidth = r.width;
+                ctx.beginPath();
+                ctx.moveTo(r.x1 - camX, r.y1 - camY);
+                ctx.lineTo(r.x2 - camX, r.y2 - camY);
+                ctx.stroke();
+                // Orta çizgi
+                ctx.strokeStyle = '#6a5a4a';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([10, 10]);
+                ctx.beginPath();
+                ctx.moveTo(r.x1 - camX, r.y1 - camY);
+                ctx.lineTo(r.x2 - camX, r.y2 - camY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            function drawFire(ctx, fire, camX, camY) {
+                const x = fire.x - camX, y = fire.y - camY;
+                const t = Date.now() / 100;
+                const flicker = Math.sin(t) * 3;
+                const size = fire.size + flicker;
+                // Sıcak parıltı
+                ctx.fillStyle = `rgba(255,100,0,${0.15 + Math.sin(t * 0.5) * 0.05})`;
+                ctx.beginPath();
+                ctx.arc(x, y, size * 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                // Alev
+                for (let i = 0; i < 5; i++) {
+                    const ox = (Math.random() - 0.5) * size * 0.6;
+                    const oy = (Math.random() - 0.5) * size * 0.3;
+                    ctx.fillStyle = `rgba(255,${Math.floor(100 + Math.random() * 100)},0,0.85)`;
+                    ctx.beginPath();
+                    ctx.arc(x + ox, y + oy, size * 0.35, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Merkez sarı
+                ctx.fillStyle = '#ffdd44';
+                ctx.beginPath();
+                ctx.arc(x, y, size * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+                // İkon
+                ctx.font = 'bold 20px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🔥', x, y - size - 6);
+            }
+
+            function drawStreetLight(ctx, l, camX, camY) {
+                const x = l.x - camX, y = l.y - camY;
+                // Direk
+                ctx.fillStyle = '#3a3a4a';
+                ctx.fillRect(x - 2, y - 30, 4, 30);
+                // Lamba
+                ctx.fillStyle = '#ffd966';
+                ctx.beginPath();
+                ctx.arc(x, y - 32, 5, 0, Math.PI * 2);
+                ctx.fill();
+                // Işık halkası (gece görünür)
+                const nf = getNightFactor();
+                if (nf > 0.2) {
+                    const grad = ctx.createRadialGradient(x, y - 32, 0, x, y - 32, 70);
+                    grad.addColorStop(0, `rgba(255,220,120,${0.35 * nf})`);
+                    grad.addColorStop(1, 'rgba(255,220,120,0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(x, y - 32, 70, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            function drawShop(ctx, shop, camX, camY, isMine) {
+                const x = shop.x - camX, y = shop.y - camY;
+                // Bina
+                ctx.fillStyle = isMine ? '#4a3a6a' : '#6a5a3a';
+                ctx.fillRect(x - 32, y - 25, 64, 50);
+                // Çatı
+                ctx.fillStyle = isMine ? '#7a5aaa' : '#aa8a4a';
+                ctx.beginPath();
+                ctx.moveTo(x - 38, y - 25);
+                ctx.lineTo(x, y - 52);
+                ctx.lineTo(x + 38, y - 25);
+                ctx.closePath();
+                ctx.fill();
+                // Kapı
+                ctx.fillStyle = '#3a1a0a';
+                ctx.fillRect(x - 9, y, 18, 25);
+                // Tabela
+                ctx.fillStyle = 'rgba(0,0,0,0.85)';
+                ctx.fillRect(x - 45, y - 70, 90, 16);
+                ctx.fillStyle = isMine ? '#a0ffa0' : '#ffd966';
+                ctx.font = 'bold 10px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`🏪 ${shop.name}`, x, y - 62);
+                // Sahibi
+                ctx.fillStyle = isMine ? '#a0ffa0' : '#a0b8d0';
+                ctx.font = '9px monospace';
+                ctx.fillText(shop.ownerName, x, y - 55);
+                // 🏪 simgesi
+                ctx.font = 'bold 16px monospace';
+                ctx.fillText('🏪', x, y - 40);
+            }
+
+            function draw() {
+                const camX = Math.floor(camera.x);
+                const camY = Math.floor(camera.y);
+
+                ctx.fillStyle = '#2a4a2a';
+                ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+                // Çim detay
+                ctx.fillStyle = '#3a5a3a';
+                const gxStart = Math.floor(camX / 20) * 20;
+                const gyStart = Math.floor(camY / 20) * 20;
+                for (let wx = gxStart; wx < camX + CANVAS_W + 20; wx += 20) {
+                    for (let wy = gyStart; wy < camY + CANVAS_H + 20; wy += 20) {
+                        if ((((wx + wy) / 20) | 0) % 37 === 0) {
+                            ctx.fillRect(wx - camX, wy - camY, 4, 4);
+                        }
+                    }
+                }
+
+                // YOLLAR (köylerden önce)
+                for (const r of world.roads) drawRoad(ctx, r, camX, camY);
+
+                // KÖYLER
+                for (const v of world.villages) drawVillage(ctx, v, camX, camY);
+
+                // AĞAÇLAR
+                for (const t of world.trees) {
+                    if (t.x < camX - 60 || t.x > camX + CANVAS_W + 60) continue;
+                    if (t.y < camY - 60 || t.y > camY + CANVAS_H + 60) continue;
+                    drawTree(ctx, t, camX, camY);
+                }
+
+                // KAYALAR
+                for (const r of world.rocks) {
+                    if (r.x < camX - 40 || r.x > camX + CANVAS_W + 40) continue;
+                    if (r.y < camY - 40 || r.y > camY + CANVAS_H + 40) continue;
+                    drawRock(ctx, r, camX, camY);
+                }
+
+                // İŞ BÖLGELERİ
+                for (const z of world.workZones) {
+                    const zx = z.x - camX, zy = z.y - camY;
+                    if (zx < -z.radius * 2 || zx > CANVAS_W + z.radius * 2) continue;
+                    if (zy < -z.radius * 2 || zy > CANVAS_H + z.radius * 2) continue;
+                    ctx.fillStyle = z.color + '80';
+                    ctx.beginPath(); ctx.arc(zx, zy, z.radius, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = z.color;
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([8, 6]);
+                    ctx.beginPath(); ctx.arc(zx, zy, z.radius, 0, Math.PI * 2); ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.font = 'bold 36px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(z.icon, zx, zy);
+                    const label = z.name;
+                    ctx.font = 'bold 13px monospace';
+                    const w = ctx.measureText(label).width;
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(zx - w / 2 - 6, zy - z.radius - 24, w + 12, 18);
+                    ctx.fillStyle = '#ffd966';
+                    ctx.fillText(label, zx, zy - z.radius - 15);
+                }
+
+                // HANLAR
+                for (const inn of world.inns) {
+                    const ix = inn.x - camX, iy = inn.y - camY;
+                    if (ix < -100 || ix > CANVAS_W + 100) continue;
+                    if (iy < -100 || iy > CANVAS_H + 100) continue;
+                    ctx.fillStyle = '#8a5a3a';
+                    ctx.fillRect(ix - 30, iy - 20, 60, 45);
+                    ctx.fillStyle = '#d4a017';
+                    ctx.beginPath();
+                    ctx.moveTo(ix - 35, iy - 20);
+                    ctx.lineTo(ix, iy - 45);
+                    ctx.lineTo(ix + 35, iy - 20);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#3a1a0a';
+                    ctx.fillRect(ix - 8, iy + 5, 16, 20);
+                    ctx.font = 'bold 14px monospace';
+                    ctx.fillStyle = '#ffd966';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🛏', ix, iy - 5);
+                }
+
+                // DÜKKANLAR
+                for (const shop of world.shops) {
+                    const dx = shop.x - camX;
+                    const dy = shop.y - camY;
+                    if (dx < -80 || dx > CANVAS_W + 80) continue;
+                    if (dy < -100 || dy > CANVAS_H + 100) continue;
+                    drawShop(ctx, shop, camX, camY, shop.ownerId === player.id);
+                }
+
+                // ELMALAR (yerde)
+                for (const a of world.apples) {
+                    if (a.collected) continue;
+                    const ax = a.x - camX, ay = a.y - camY;
+                    if (ax < -20 || ax > CANVAS_W + 20) continue;
+                    if (ay < -20 || ay > CANVAS_H + 20) continue;
+                    const bob = Math.sin(Date.now() / 400 + a.x) * 2;
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.beginPath(); ctx.arc(ax, ay + bob, 6, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#ff6b5b';
+                    ctx.beginPath(); ctx.arc(ax - 2, ay + bob - 2, 2, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#3a2a1a';
+                    ctx.fillRect(ax - 1, ay + bob - 8, 2, 4);
+                }
+
+                // SANDIKLAR
+                for (const chest of world.chests) {
+                    if (chest.opened) continue;
+                    const cx = chest.x - camX, cy = chest.y - camY;
+                    if (cx < -40 || cx > CANVAS_W + 40) continue;
+                    if (cy < -40 || cy > CANVAS_H + 40) continue;
+                    const bob = Math.sin(Date.now() / 300 + chest.x) * 3;
+                    ctx.fillStyle = 'rgba(255,215,0,0.15)';
+                    ctx.beginPath(); ctx.arc(cx, cy + bob, 22, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#8a5a2a';
+                    ctx.fillRect(cx - 12, cy - 8 + bob, 24, 16);
+                    ctx.fillStyle = '#a06a3a';
+                    ctx.fillRect(cx - 12, cy - 10 + bob, 24, 6);
+                    ctx.fillStyle = '#d4a017';
+                    ctx.fillRect(cx - 12, cy - 2 + bob, 24, 2);
+                    ctx.fillRect(cx - 2, cy - 10 + bob, 4, 18);
+                    ctx.fillStyle = '#ffd966';
+                    ctx.fillRect(cx - 2, cy - 4 + bob, 4, 4);
+                }
+
+                // NPC'LER
+                for (const npc of world.npcs) {
+                    if (npc.x < camX - 60 || npc.x > camX + CANVAS_W + 60) continue;
+                    if (npc.y < camY - 60 || npc.y > camY + CANVAS_H + 60) continue;
+                    const npcProf = {
+                        charId:0, shirtColor:npc.color,
+                        hairColor:'#3a2a1a', skinColor:'#d4a070', pantsColor:'#3a3a4a',
+                    };
+                    drawChar(ctx, npc.x - camX - PLAYER_SIZE / 2, npc.y - camY - PLAYER_SIZE / 2,
+                        PLAYER_SIZE, CHARACTERS[0], npcProf, 'down', 0, false, npc.name, '#a0e0a0');
+                }
+
+                // DİĞER OYUNCULAR
+                for (const p of otherPlayers.values()) {
+                    if (p.x < camX - 80 || p.x > camX + CANVAS_W + 80) continue;
+                    if (p.y < camY - 80 || p.y > camY + CANVAS_H + 80) continue;
+                    const ch = CHARACTERS[p.profile?.charId || 0] || CHARACTERS[0];
+                    const label = (p.job && p.job !== 'none' ? (JOBS.find(j => j.id === p.job)?.icon || '') + ' ' : '') + p.name;
+                    drawChar(ctx, p.x - camX - PLAYER_SIZE / 2, p.y - camY - PLAYER_SIZE / 2,
+                        PLAYER_SIZE, ch, p.profile || {}, p.facing, p.animFrame, false, label,
+                        p.profile?.nameColor || '#ffa0ff');
+                }
+
+                // KENDİ OYUNCU
+                const myCh = CHARACTERS[player.profile.charId] || CHARACTERS[0];
+                const myLabel = (player.job && player.job !== 'none' ? (JOBS.find(j => j.id === player.job)?.icon || '') + ' ' : '⭐ ') + player.name;
+                drawChar(ctx, player.x - camX - PLAYER_SIZE / 2, player.y - camY - PLAYER_SIZE / 2,
+                    PLAYER_SIZE, myCh, player.profile, player.facing, player.animFrame, true,
+                    myLabel, player.profile.nameColor);
+
+                // SOKAK LAMBALARI
+                const nf = getNightFactor();
+                // Önce direkler
+                for (const l of world.streetLights) {
+                    if (l.x < camX - 80 || l.x > camX + CANVAS_W + 80) continue;
+                    if (l.y < camY - 80 || l.y > camY + CANVAS_H + 80) continue;
+                    drawStreetLight(ctx, l, camX, camY);
+                }
+
+                // YANGINLAR (en üstte)
+                for (const fire of world.fires) {
+                    if (fire.extinguished) continue;
+                    const fx = fire.x - camX, fy = fire.y - camY;
+                    if (fx < -100 || fx > CANVAS_W + 100) continue;
+                    if (fy < -100 || fy > CANVAS_H + 100) continue;
+                    drawFire(ctx, fire, camX, camY);
+                }
+
+                // SINIR
+                ctx.strokeStyle = '#8a4a4a';
+                ctx.lineWidth = 6;
+                ctx.setLineDash([12, 8]);
+                ctx.strokeRect(-camX, -camY, WORLD_W, WORLD_H);
+                ctx.setLineDash([]);
+
+                // GECE overlay
+                if (nf > 0.01) {
+                    ctx.fillStyle = `rgba(10, 15, 40, ${nf * 0.65})`;
+                    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+                }
+
+                drawMinimap();
+            }
+
+            function drawMinimap() {
+                const mmW = isMobile ? 100 : 160;
+                const mmH = isMobile ? 75 : 120;
+                const mmX = CANVAS_W - mmW - 8;
+                const mmY = isMobile ? 200 : (CANVAS_H - mmH - 8);
+                ctx.fillStyle = 'rgba(14,26,42,0.85)';
+                ctx.fillRect(mmX, mmY, mmW, mmH);
+                ctx.strokeStyle = '#5a7a9a';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(mmX, mmY, mmW, mmH);
+                const sx = mmW / WORLD_W;
+                const sy = mmH / WORLD_H;
+                // Yollar
+                ctx.strokeStyle = '#8a7a6a';
+                ctx.lineWidth = 1;
+                for (const r of world.roads) {
+                    ctx.beginPath();
+                    ctx.moveTo(mmX + r.x1 * sx, mmY + r.y1 * sy);
+                    ctx.lineTo(mmX + r.x2 * sx, mmY + r.y2 * sy);
+                    ctx.stroke();
+                }
+                // Köyler
+                for (const v of world.villages) {
+                    ctx.fillStyle = '#6a5a3a';
+                    ctx.fillRect(mmX + v.x * sx, mmY + v.y * sy, v.w * sx, v.h * sy);
+                }
+                // Yangınlar
+                for (const f of world.fires) {
+                    if (f.extinguished) continue;
+                    ctx.fillStyle = '#ff6a3a';
+                    ctx.beginPath();
+                    ctx.arc(mmX + f.x * sx, mmY + f.y * sy, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Dükkanlar
+                ctx.fillStyle = '#a0ffa0';
+                for (const s of world.shops) {
+                    ctx.fillRect(mmX + s.x * sx - 1, mmY + s.y * sy - 1, 3, 3);
+                }
+                // Oyuncu
+                ctx.fillStyle = '#ffd966';
+                ctx.fillRect(mmX + player.x * sx - 2, mmY + player.y * sy - 2, 5, 5);
+                // Diğer oyuncular
+                ctx.fillStyle = '#ffa0ff';
+                for (const p of otherPlayers.values()) {
+                    ctx.fillRect(mmX + p.x * sx - 2, mmY + p.y * sy - 2, 4, 4);
+                }
+                // NPC
+                ctx.fillStyle = '#a0e0a0';
+                for (const n of world.npcs) {
+                    ctx.fillRect(mmX + n.x * sx - 1, mmY + n.y * sy - 1, 2, 2);
+                }
+            }
+
+            // ==================== DÖNGÜ ====================
+            let lastTime = performance.now();
+            function gameLoop(now) {
+                const dt = Math.min(50, now - lastTime);
+                lastTime = now;
+                update(dt);
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // ==================== BAŞLAT ====================
+            function saveProfileToLocal() {
+                try {
+                    localStorage.setItem('pixelworld_profile', JSON.stringify({
+                        name:player.name, profile:player.profile, money:player.money,
+                        job:player.job, level:player.level, xp:player.xp,
+                        badges:player.badges, quests:player.quests, stats:player.stats,
+                    }));
+                } catch(e) {}
+            }
+
+            try {
+                const saved = localStorage.getItem('pixelworld_profile');
+                if (saved) {
+                    const s = JSON.parse(saved);
+                    if (s.name) player.name = s.name;
+                    if (s.profile) Object.assign(player.profile, s.profile);
+                    if (typeof s.money === 'number') player.money = s.money;
+                    if (s.job) player.job = s.job;
+                    if (typeof s.level === 'number') player.level = s.level;
+                    if (typeof s.xp === 'number') player.xp = s.xp;
+                    if (Array.isArray(s.badges)) player.badges = s.badges;
+                    if (s.quests) Object.assign(player.quests, s.quests);
+                    if (s.stats) Object.assign(player.stats, s.stats);
+                }
+            } catch(e) {}
+
+            initQuests();
+            updateUI();
+            renderCharGrid();
+            renderRoomLists();
+            setInterval(saveProfileToLocal, 5000);
+            setInterval(renderRoomLists, 3000);
+
+            addChatMessage('SİSTEM', 'piksel dünya\'ya hoş geldin!', '#ffd966');
+            addChatMessage('SİSTEM', isMobile ? '📱 joystick ile hareket et' : '⌨️ WASD ile hareket et', '#a0b8d0');
+            addChatMessage('SİSTEM', '🎓 J ile meslek seç | 🏪 500💰 ile dükkan aç', '#a0b8d0');
+
+            openModal(roomModal);
+            // Lobi için MQTT bağlantısı aç (odaya girmeden)
+            function connectLobbyOnly() {
+                if (typeof mqtt === 'undefined') return;
+                // lobby için ayrı bağlantı yapmıyoruz, oda bağlantısı yapılınca zaten lobiye subscribe ediliyor.
+                // Ama oda seçmeden önce liste görmek için geçici lobby bağlantısı:
+                if (client) return;
+                try {
+                    const lobbyClient = mqtt.connect(BROKER_URL, {
+                        clientId: 'lobby_' + Math.random().toString(36).substr(2, 8),
+                        clean: true, connectTimeout: 10000, reconnectPeriod: 5000,
+                    });
+                    lobbyClient.on('connect', () => {
+                        lobbyClient.subscribe(LOBBY_TOPIC, { qos: 0 });
+                        lobbyClient.publish(LOBBY_TOPIC, JSON.stringify({ type:'room_request', id:'lobby' }));
+                    });
+                    lobbyClient.on('message', (topic, message) => {
+                        if (topic !== LOBBY_TOPIC) return;
+                        try {
+                            const data = JSON.parse(message.toString());
+                            if (data.type === 'room_announce') {
+                                activeRooms.set(data.roomId, {
+                                    roomId:data.roomId, name:data.name,
+                                    hasPassword:data.hasPassword, count:data.count,
+                                    lastSeen:Date.now(),
+                                });
+                                renderRoomLists();
+                            }
+                        } catch(e) {}
+                    });
+                    window._lobbyClient = lobbyClient;
+                } catch(e) {}
+            }
+            setTimeout(connectLobbyOnly, 500);
+
+            requestAnimationFrame(gameLoop);
+
+            window.addEventListener('beforeunload', () => {
+                publishPlayerLeave();
+                saveProfileToLocal();
+            });
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && isConnected) publishPlayerUpdate();
+            });
+        })();
+    </script>
+</body>
+</html>
