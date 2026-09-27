@@ -236,6 +236,7 @@
                 <button class="mobile-menu-btn" id="mmMarsBuild"><span>🏗️</span><span>İnşa</span></button>
                 <button class="mobile-menu-btn" id="mmMap"><span>🗺️</span><span>Harita</span></button>
                 <button class="mobile-menu-btn" id="mmDm"><span>✉️</span><span>DM</span></button>
+                <button class="mobile-menu-btn" id="mmFriends"><span>👥</span><span>Arkadaş</span></button>
             </div>
 
             <div class="bottom-bar">
@@ -254,6 +255,7 @@
                     <button id="lbBtn">📊</button>
                     <button id="shopSetupBtn">🏪</button>
                     <button id="dmBtn">✉️</button>
+                    <button id="friendsBtn">👥</button>
                 </div>
             </div>
         </div>
@@ -286,7 +288,7 @@
         <!-- PROFİL MODAL -->
         <div class="modal" id="profileModal">
             <div class="modal-content" style="max-width:560px;">
-                <h2>⚙️ Profil</h2>
+                <h2>⚙️ Profil / Ayarlar</h2>
                 <div class="label">oyuncu adı</div>
                 <input type="text" id="profileNameInput" placeholder="adın" maxlength="16">
                 <div class="label">isim rengi</div>
@@ -307,6 +309,20 @@
                     <button class="secondary" id="pixelEraserBtn">Silgi</button>
                 </div>
                 <div id="pixelEditorGrid"></div>
+
+                <div class="label" style="margin-top:14px;">🚀 Uzaya Gezegen Ekle (100.000 💰)</div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="newPlanetName" placeholder="gezegen adı" maxlength="16" style="flex:1;margin-bottom:0;">
+                    <button class="secondary" id="addPlanetBtn" style="margin:0;">Ekle</button>
+                </div>
+                <div style="color:#a0b8d0;font-size:11px;margin-top:4px;">Paran: <span id="planetMoney">0</span> 💰</div>
+
+                <div class="label" style="margin-top:14px;">💾 Oda Kaydet / Yükle</div>
+                <div>
+                    <button class="secondary" id="saveRoomBtn">Odayı Kaydet</button>
+                    <button class="secondary" id="loadRoomBtn">Oda Yükle</button>
+                </div>
+
                 <div style="margin-top:14px;">
                     <button id="saveProfileBtn">Kaydet</button>
                 </div>
@@ -393,8 +409,8 @@
         <div class="modal" id="tradeModal">
             <div class="modal-content">
                 <h2>🤝 Ticaret</h2>
-                <div class="label">hedef oyuncu adı</div>
-                <input type="text" id="tradeTargetInput" placeholder="oyuncu adı" maxlength="16">
+                <div class="label">hedef oyuncu</div>
+                <select id="tradeTargetSelect"></select>
                 <div class="label">miktar</div>
                 <input type="number" id="tradeAmountInput" placeholder="10" value="10" min="1">
                 <div>
@@ -408,8 +424,8 @@
         <div class="modal" id="dmModal">
             <div class="modal-content" style="max-width:480px;">
                 <h2>✉️ Özel Mesajlar</h2>
-                <div class="label">arkadaş seç</div>
-                <div id="dmFriendsList" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;text-align:left;"></div>
+                <div class="label">arkadaş / oyuncu seç</div>
+                <select id="dmTargetSelect"></select>
                 <div class="label" style="margin-top:10px;">mesaj</div>
                 <input type="text" id="dmInput" placeholder="mesajını yaz..." maxlength="120">
                 <div>
@@ -418,6 +434,18 @@
                 </div>
                 <div style="margin-top:10px;color:#a0b8d0;font-size:11px;">Alınan mesajlar:</div>
                 <div id="dmInbox" style="background:#0e1a2a;border:2px solid #5a7a9a;border-radius:6px;padding:8px;margin-top:6px;max-height:150px;overflow-y:auto;text-align:left;font-size:11px;color:#d0c0ff;"></div>
+            </div>
+        </div>
+
+        <!-- ARKADAŞ MODAL -->
+        <div class="modal" id="friendsModal">
+            <div class="modal-content" style="max-width:480px;">
+                <h2>👥 Arkadaşlar</h2>
+                <div style="color:#a0b8d0;font-size:12px;margin-bottom:8px;">Aynı odadaki oyunculara tıklayıp arkadaş ekleyebilir veya mesaj atabilirsin.</div>
+                <div id="friendsList" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;text-align:left;"></div>
+                <div style="margin-top:12px;">
+                    <button class="cancel" id="closeFriendsBtn">Kapat</button>
+                </div>
             </div>
         </div>
 
@@ -513,16 +541,14 @@
 
             const MS_PER_GAME_HOUR_WORLD = 5 * 60 * 1000;
             const MS_PER_GAME_HOUR_SPACE = 60 * 1000;
-            const TIME_EPOCH = 1704067200000;
 
             let accumulatedGameHours = 0;
             let roomTimeOwnerId = null;
             let lastTimeBroadcast = 0;
 
             function getGameTime() {
-                const totalGameHours = accumulatedGameHours;
-                const day = Math.floor(totalGameHours / 24);
-                const hourOfDay = totalGameHours % 24;
+                const day = Math.floor(accumulatedGameHours / 24);
+                const hourOfDay = accumulatedGameHours % 24;
                 return { day, hourOfDay };
             }
             function formatGameTime() {
@@ -540,7 +566,6 @@
                 return 0;
             }
 
-            // ==================== OYUNCU ====================
             const player = {
                 id:'p_' + Math.random().toString(36).substr(2, 9),
                 name:'Gezgin' + Math.floor(Math.random() * 1000),
@@ -558,7 +583,6 @@
                 inHouse: false,
             };
 
-            // ==================== DÜNYA ====================
             const world = {
                 villages:[
                     { x:400, y:300, w:500, h:400, name:'Piksel Köyü', color:'#4a3a2a', roofColor:'#8a5a3a' },
@@ -572,7 +596,6 @@
                 houses:[], portals:[],
             };
 
-            // ==================== UZAY ====================
             const space = {
                 width: 3000, height: 2000,
                 stars: [], planets: [], aliens: [],
@@ -580,7 +603,6 @@
                 asteroids: [],
             };
 
-            // ==================== MARSLAR ====================
             const MARS_BUILDINGS = [
                 { id:'house', icon:'🏠', name:'Ev', price:200, w:50, h:50 },
                 { id:'farm', icon:'🌾', name:'Çiftlik', price:150, w:60, h:40 },
@@ -592,23 +614,21 @@
             const mars = { width: 2400, height: 2400, buildings: [], entryX: 1200, entryY: 1200 };
             let marsBuildMode = null;
 
-            // ==================== SATRANÇ ====================
             const chess = {
                 board: [], turn: 'white', selected: null,
                 myColor: null, players: {}, active: false,
                 lastMove: null, checkmate: false, stalemate: false, winner: null,
             };
 
-            // ==================== DİĞER ====================
             const otherPlayers = new Map();
             const camera = { x:0, y:0 };
             let pendingFriendTarget = null;
             let pendingFriendName = null;
             let client = null, lobbyClient = null;
-            let currentRoom = null, roomPassword = null;
+            let currentRoom = null, roomPassword = null, currentRoomName = null;
             let isConnected = false;
-            const TOPIC_PREFIX = 'pikseldunya_v10/';
-            const LOBBY_TOPIC = 'pikseldunya_v10_lobby';
+            const TOPIC_PREFIX = 'pikseldunya_v11/';
+            const LOBBY_TOPIC = 'pikseldunya_v11_lobby';
             const activeRooms = new Map();
             const BROKER_URLS = [
                 'wss://broker.emqx.io:8084/mqtt',
@@ -669,6 +689,11 @@
             const pixelClearBtn = $('pixelClearBtn');
             const pixelFillBtn = $('pixelFillBtn');
             const pixelEraserBtn = $('pixelEraserBtn');
+            const newPlanetName = $('newPlanetName');
+            const addPlanetBtn = $('addPlanetBtn');
+            const planetMoney = $('planetMoney');
+            const saveRoomBtn = $('saveRoomBtn');
+            const loadRoomBtn = $('loadRoomBtn');
 
             const houseModal = $('houseModal');
             const houseYourMoney = $('houseYourMoney');
@@ -699,17 +724,21 @@
             const closeLbBtn = $('closeLbBtn');
 
             const tradeModal = $('tradeModal');
-            const tradeTargetInput = $('tradeTargetInput');
+            const tradeTargetSelect = $('tradeTargetSelect');
             const tradeAmountInput = $('tradeAmountInput');
             const sendTradeBtn = $('sendTradeBtn');
             const cancelTradeBtn = $('cancelTradeBtn');
 
             const dmModal = $('dmModal');
-            const dmFriendsList = $('dmFriendsList');
+            const dmTargetSelect = $('dmTargetSelect');
             const dmInput = $('dmInput');
             const dmSendBtn = $('dmSendBtn');
             const closeDmBtn = $('closeDmBtn');
             const dmInbox = $('dmInbox');
+
+            const friendsModal = $('friendsModal');
+            const friendsList = $('friendsList');
+            const closeFriendsBtn = $('closeFriendsBtn');
 
             const pwModal = $('pwModal');
             const pwInput = $('pwInput');
@@ -731,7 +760,6 @@
             const marsBuildModal = $('marsBuildModal');
             const marsBuildList = $('marsBuildList');
             const cancelMarsBuildBtn = $('cancelMarsBuildBtn');
-            cancelMarsBuildBtn.addEventListener('click', () => closeModal(marsBuildModal));
 
             const chessModal = $('chessModal');
             const chessBoard = $('chessBoard');
@@ -752,6 +780,7 @@
             const lbBtn = $('lbBtn');
             const shopSetupBtn = $('shopSetupBtn');
             const dmBtn = $('dmBtn');
+            const friendsBtn = $('friendsBtn');
 
             const joystick = $('joystick');
             const joystickKnob = $('joystick-knob');
@@ -932,13 +961,8 @@
             ];
 
             // ==================== PIXEL BOYAMA ====================
-            const PIXEL_GRID = 16; // 16x16 pixel
-            let paintingPixels = null; // düzenleme sırasında geçici
-
-            function defaultPixels() {
-                // Karakterin varsayılan pixel görünümü (16x16) - null ise drawChar normal çizer
-                return null;
-            }
+            const PIXEL_GRID = 16;
+            let paintingPixels = null;
 
             function initPixelEditor() {
                 paintingPixels = player.profile.customPixels
@@ -1004,22 +1028,18 @@
                 accumulatedGameHours = 0;
                 lastTimeBroadcast = 0;
             }
-
             function isAllPlayersInDeepSpace() {
-                // Sadece "space" (boşluk) ise hızlı; mars/satranç gezegeni ise yavaş
                 if (player.dimension !== 'space') return false;
                 for (const p of otherPlayers.values()) {
                     if (p.dimension !== 'space') return false;
                 }
                 return true;
             }
-
             function advanceGameTime(dt) {
                 const fast = isAllPlayersInDeepSpace();
                 const msPerHour = fast ? MS_PER_GAME_HOUR_SPACE : MS_PER_GAME_HOUR_WORLD;
                 accumulatedGameHours += dt / msPerHour;
             }
-
             function broadcastGameTime() {
                 if (!client || !isConnected || !currentRoom) return;
                 client.publish(TOPIC_PREFIX + currentRoom + '/gameTime', JSON.stringify({
@@ -1029,7 +1049,6 @@
                     password: roomPassword || ''
                 }));
             }
-
             function handleGameTimeSync(data) {
                 if (data.id === player.id) return;
                 if (!roomTimeOwnerId) roomTimeOwnerId = data.id;
@@ -1533,8 +1552,8 @@
                 let connected = false;
                 client.on('connect', () => {
                     connected = true; isConnected = true;
-                    currentRoom = room; roomPassword = password;
-                    statusEl.textContent = '🟢 ' + room;
+                    currentRoom = room; roomPassword = password; currentRoomName = roomName || room;
+                    statusEl.textContent = '🟢 ' + (roomName || room);
                     setConnectionStatus('✅ MQTT bağlandı!', true);
                     const topic = TOPIC_PREFIX + room + '/#';
                     client.subscribe(topic, { qos: 0 }, (err) => {
@@ -1588,6 +1607,7 @@
                             animFrame:0, animTimer:0, lastUpdate:Date.now(),
                         });
                         addChatMessage('SİSTEM', data.name + ' katıldı', '#a0e0a0');
+                        renderFriendsList();
                     } else {
                         const p = otherPlayers.get(data.id);
                         Object.assign(p, {
@@ -1604,7 +1624,6 @@
                     chatBox.classList.add('active');
                 }
                 else if (topic === base + '/dm') {
-                    // DM başkasına gelmiş, biz alıcıysak göster
                     if (data.to === player.id) {
                         addDmInbox(data.fromName, data.text);
                         showDmNotification(data.fromName, data.text);
@@ -1655,6 +1674,7 @@
                     if (otherPlayers.has(data.id)) {
                         addChatMessage('SİSTEM', otherPlayers.get(data.id).name + ' ayrıldı', '#ffa0a0');
                         otherPlayers.delete(data.id);
+                        renderFriendsList();
                     }
                 }
                 else if (topic === base + '/shopUpdate') {
@@ -1700,6 +1720,13 @@
                     if (data.id === player.id) return;
                     applyMove(data.fromR, data.fromC, data.toR, data.toC);
                 }
+                else if (topic === base + '/planetAdd') {
+                    if (data.id === player.id) return;
+                    if (data.planet && !space.planets.find(p => p.id === data.planet.id)) {
+                        space.planets.push(data.planet);
+                        showToast(`🪐 ${data.planet.name} gezegeni eklendi!`, 2200);
+                    }
+                }
             }
 
             function publishPlayerUpdate() {
@@ -1729,6 +1756,12 @@
                     id: player.id, fromName: player.name, to: toId, toName, text, password: roomPassword || '',
                 }));
             }
+            function publishPlanetAdd(planet) {
+                if (!client || !isConnected || !currentRoom) return;
+                client.publish(TOPIC_PREFIX + currentRoom + '/planetAdd', JSON.stringify({
+                    id: player.id, planet, password: roomPassword || ''
+                }));
+            }
             function sendFriendRequest() {
                 if (!pendingFriendTarget) { showToast('önce bir oyuncuyla etkileşime geç (E)'); return; }
                 if (player.friends.includes(pendingFriendName)) { showToast(`${pendingFriendName} zaten arkadaşın ✅`); pendingFriendTarget = null; return; }
@@ -1747,41 +1780,34 @@
                 pendingFriendTarget = null;
                 pendingFriendName = null;
                 publishPlayerUpdate();
+                renderFriendsList();
             }
             function publishPlayerLeave() {
                 if (!client || !isConnected || !currentRoom) return;
                 try { client.publish(TOPIC_PREFIX + currentRoom + '/playerLeave', JSON.stringify({ id:player.id, password:roomPassword || '' })); } catch(e) {}
             }
 
-            // ==================== DM FONKSİYONLARI ====================
-            let selectedDmTarget = null;
-            const dmHistory = []; // {fromName, text, ts}
+            // ==================== DM ====================
+            const dmHistory = [];
 
             function openDmModal() {
-                renderDmFriends();
+                renderDmTargets();
                 renderDmInbox();
                 openModal(dmModal);
             }
-            function renderDmFriends() {
-                dmFriendsList.innerHTML = '';
-                const friends = player.friends;
-                if (friends.length === 0) {
-                    dmFriendsList.innerHTML = '<div style="color:#6a8aaa;font-size:11px;padding:6px;">Henüz arkadaşın yok. Bir oyuncuyla E tuşuyla etkileşip F ile ekle.</div>';
+            function renderDmTargets() {
+                dmTargetSelect.innerHTML = '';
+                const names = new Set([...player.friends, ...Array.from(otherPlayers.values()).map(p => p.name)]);
+                if (names.size === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = ''; opt.textContent = 'Oyuncu yok';
+                    dmTargetSelect.appendChild(opt);
                     return;
                 }
-                friends.forEach(name => {
-                    // otherPlayers içinden id bul
-                    let fid = null;
-                    for (const [id, p] of otherPlayers) if (p.name === name) { fid = id; break; }
-                    const el = document.createElement('div');
-                    el.className = 'room-item';
-                    el.innerHTML = `<div class="name">👤 ${name} ${fid ? '🟢' : '⚪'}</div>`;
-                    el.onclick = () => {
-                        selectedDmTarget = { id: fid, name };
-                        dmInput.placeholder = `mesaj → ${name}`;
-                        showToast(`✉️ ${name} seçildi`);
-                    };
-                    dmFriendsList.appendChild(el);
+                names.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name; opt.textContent = name;
+                    dmTargetSelect.appendChild(opt);
                 });
             }
             function renderDmInbox() {
@@ -1814,18 +1840,59 @@
                 openDmModal();
             });
             dmSendBtn.addEventListener('click', () => {
-                if (!selectedDmTarget) { showToast('önce bir arkadaş seç'); return; }
-                if (!selectedDmTarget.id) { showToast('arkadaş çevrimdışı ❌'); return; }
+                const targetName = dmTargetSelect.value;
+                if (!targetName) { showToast('önce bir oyuncu seç'); return; }
+                let targetId = null;
+                for (const [id, p] of otherPlayers) if (p.name === targetName) { targetId = id; break; }
+                if (!targetId) { showToast('oyuncu çevrimdışı ❌'); return; }
                 const text = dmInput.value.trim();
                 if (!text) return;
-                publishDm(selectedDmTarget.id, selectedDmTarget.name, text);
-                addDmInbox(player.name, text, true, selectedDmTarget.name);
+                publishDm(targetId, targetName, text);
+                addDmInbox(player.name, text, true, targetName);
                 dmInput.value = '';
                 showToast('✉️ mesaj gönderildi');
             });
             closeDmBtn.addEventListener('click', () => closeModal(dmModal));
             dmBtn.addEventListener('click', openDmModal);
             $('mmDm').addEventListener('click', () => { openDmModal(); mobileMenu.classList.remove('active'); });
+
+            // ==================== ARKADAŞLAR ====================
+            function openFriendsModal() {
+                renderFriendsList();
+                openModal(friendsModal);
+            }
+            function renderFriendsList() {
+                friendsList.innerHTML = '';
+                const all = Array.from(otherPlayers.values());
+                if (all.length === 0) {
+                    friendsList.innerHTML = '<div style="color:#6a8aaa;font-size:11px;padding:6px;">Aynı odada başka oyuncu yok.</div>';
+                    return;
+                }
+                all.forEach(p => {
+                    const isFriend = player.friends.includes(p.name);
+                    const el = document.createElement('div');
+                    el.className = 'room-item';
+                    el.style.display = 'flex';
+                    el.style.gap = '6px';
+                    el.innerHTML = `<div style="flex:1;color:${p.profile?.nameColor || '#b0d0ff'};font-size:12px;">${isFriend ? '⭐' : '👤'} ${p.name}</div>
+                        <button class="secondary" style="padding:2px 8px;font-size:10px;">${isFriend ? '✉️' : '➕'}</button>`;
+                    el.querySelector('button').onclick = () => {
+                        if (isFriend) {
+                            dmTargetSelect.value = p.name;
+                            openDmModal();
+                        } else {
+                            pendingFriendTarget = p.id;
+                            pendingFriendName = p.name;
+                            sendFriendRequest();
+                            renderFriendsList();
+                        }
+                    };
+                    friendsList.appendChild(el);
+                });
+            }
+            friendsBtn.addEventListener('click', openFriendsModal);
+            closeFriendsBtn.addEventListener('click', () => closeModal(friendsModal));
+            $('mmFriends').addEventListener('click', () => { openFriendsModal(); mobileMenu.classList.remove('active'); });
 
             // ==================== UI ====================
             function getLevelInfo() {
@@ -1843,6 +1910,7 @@
                 tradeMoneyDisplay.textContent = player.money;
                 houseYourMoney.textContent = player.money;
                 shopYourMoney.textContent = player.money;
+                planetMoney.textContent = player.money;
                 const li = getLevelInfo();
                 const curXp = li.current.xp;
                 const nextXp = li.next ? li.next.xp : player.xp;
@@ -2316,7 +2384,7 @@
                     addChatMessage('BİLGİ', `${nearest.name} | ❤️${nearest.hp} | 💰${nearest.money}`, '#b0d0ff');
                     if (player.friends.includes(nearest.name)) {
                         addChatMessage('BİLGİ', `${nearest.name} zaten arkadaşın ✅`, '#a0e0a0');
-                        addChatMessage('BİLGİ', `Özel mesaj için Y'ye bas veya ✉️ butonunu kullan`, '#a0d8ff');
+                        addChatMessage('BİLGİ', `Özel mesaj için ✉️ butonunu kullan`, '#a0d8ff');
                     } else {
                         addChatMessage('BİLGİ', `${nearest.name} arkadaş eklemek için F'ye bas`, '#ffd966');
                         pendingFriendTarget = nearest.id;
@@ -2514,11 +2582,20 @@
                 const myShops = world.shops.filter(s => s.ownerId === player.id);
                 client.publish(TOPIC_PREFIX + currentRoom + '/shopUpdate', JSON.stringify({ id:player.id, shops:myShops, password:roomPassword || '' }));
             }
-            function openTradeModal() { openModal(tradeModal); }
+            function openTradeModal() {
+                tradeTargetSelect.innerHTML = '';
+                const names = new Set([...player.friends, ...Array.from(otherPlayers.values()).map(p => p.name)]);
+                names.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name; opt.textContent = name;
+                    tradeTargetSelect.appendChild(opt);
+                });
+                openModal(tradeModal);
+            }
             tradeBtn.addEventListener('click', openTradeModal);
             cancelTradeBtn.addEventListener('click', () => closeModal(tradeModal));
             sendTradeBtn.addEventListener('click', () => {
-                const targetName = tradeTargetInput.value.trim();
+                const targetName = tradeTargetSelect.value;
                 const amount = parseInt(tradeAmountInput.value);
                 if (!targetName || !amount || amount <= 0) { showToast('geçersiz! ❌'); return; }
                 if (amount > player.money) { showToast('yeterli para yok! ❌'); return; }
@@ -2574,7 +2651,6 @@
             saveProfileBtn.addEventListener('click', () => {
                 const newName = profileNameInput.value.trim();
                 if (newName.length >= 2) player.name = newName.substr(0, 16);
-                // Pixel boyamayı kaydet - eğer boş değilse customPixels olarak ayarla
                 if (paintingPixels) {
                     let hasAny = false;
                     for (let r = 0; r < PIXEL_GRID; r++) for (let c = 0; c < PIXEL_GRID; c++) if (paintingPixels[r][c]) { hasAny = true; break; }
@@ -2586,6 +2662,133 @@
                 saveProfileToLocal();
                 showToast('✅ profil kaydedildi');
             });
+
+            // ==================== GEZEGEN EKLE ====================
+            addPlanetBtn.addEventListener('click', () => {
+                const name = newPlanetName.value.trim();
+                if (!name) { showToast('gezegen adı gir'); return; }
+                if (player.money < 100000) { showToast('❌ 100.000 💰 gerekli'); return; }
+                player.money -= 100000;
+                updateUI();
+                const planet = {
+                    id: 'planet_' + Math.random().toString(36).substr(2, 9),
+                    x: Math.random() * (space.width - 400) + 200,
+                    y: Math.random() * (space.height - 400) + 200,
+                    radius: 100,
+                    color1: '#1a6a2a',
+                    color2: '#4ad45a',
+                    ring: false,
+                    name,
+                    enterable: true,
+                    empty: true,
+                };
+                space.planets.push(planet);
+                publishPlanetAdd(planet);
+                showToast(`🪐 ${name} gezegeni eklendi!`, 2500);
+                saveProfileToLocal();
+            });
+
+            // ==================== ODA KAYDET / YÜKLE ====================
+            saveRoomBtn.addEventListener('click', () => {
+                if (!currentRoom) { showToast('önce bir odaya gir'); return; }
+                const data = {
+                    version: 1,
+                    room: currentRoom,
+                    roomName: currentRoomName,
+                    password: roomPassword || '',
+                    player: {
+                        name: player.name,
+                        money: player.money,
+                        hp: player.hp,
+                        level: player.level,
+                        xp: player.xp,
+                        job: player.job,
+                        friends: player.friends,
+                        badges: player.badges,
+                        quests: player.quests,
+                        stats: player.stats,
+                        profile: player.profile,
+                        ownedHouse: player.ownedHouse,
+                        dimension: player.dimension,
+                        x: player.x,
+                        y: player.y,
+                    },
+                    world: {
+                        houses: world.houses.map(h => ({ id:h.id, ownerId:h.ownerId, ownerName:h.ownerName })),
+                        shops: world.shops,
+                        fires: world.fires,
+                    },
+                    space: {
+                        planets: space.planets.filter(p => p.empty),
+                    },
+                    mars: {
+                        buildings: mars.buildings.filter(b => b.ownerId === player.id),
+                    },
+                    ts: Date.now(),
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `pikseldunya_${currentRoom}_${Date.now()}.json`;
+                a.click();
+                showToast('💾 oda kaydedildi');
+            });
+            loadRoomBtn.addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'application/json';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        try {
+                            const data = JSON.parse(ev.target.result);
+                            if (data.player) {
+                                if (data.player.name) player.name = data.player.name;
+                                if (typeof data.player.money === 'number') player.money = data.player.money;
+                                if (typeof data.player.hp === 'number') player.hp = data.player.hp;
+                                if (typeof data.player.level === 'number') player.level = data.player.level;
+                                if (typeof data.player.xp === 'number') player.xp = data.player.xp;
+                                if (data.player.job) player.job = data.player.job;
+                                if (Array.isArray(data.player.friends)) player.friends = data.player.friends;
+                                if (Array.isArray(data.player.badges)) player.badges = data.player.badges;
+                                if (data.player.quests) Object.assign(player.quests, data.player.quests);
+                                if (data.player.stats) Object.assign(player.stats, data.player.stats);
+                                if (data.player.profile) Object.assign(player.profile, data.player.profile);
+                                if (data.player.ownedHouse) player.ownedHouse = data.player.ownedHouse;
+                                if (typeof data.player.x === 'number') player.x = data.player.x;
+                                if (typeof data.player.y === 'number') player.y = data.player.y;
+                            }
+                            if (data.world?.houses) {
+                                data.world.houses.forEach(h => {
+                                    const house = world.houses.find(x => x.id === h.id);
+                                    if (house) { house.ownerId = h.ownerId; house.ownerName = h.ownerName; }
+                                });
+                            }
+                            if (data.world?.shops) world.shops = data.world.shops;
+                            if (data.space?.planets) {
+                                data.space.planets.forEach(p => {
+                                    if (!space.planets.find(x => x.id === p.id)) space.planets.push(p);
+                                });
+                            }
+                            if (data.mars?.buildings) {
+                                mars.buildings = mars.buildings.filter(b => b.ownerId !== player.id);
+                                data.mars.buildings.forEach(b => mars.buildings.push(b));
+                            }
+                            updateUI();
+                            saveProfileToLocal();
+                            showToast('📂 oda yüklendi, bağlanılıyor...');
+                            if (data.room) connectMQTT(data.room, data.password || '', data.roomName || data.room);
+                        } catch (err) {
+                            showToast('❌ dosya okunamadı');
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+
             questBtn.addEventListener('click', openQuestModal);
             closeQuestBtn.addEventListener('click', () => closeModal(questModal));
             badgeBtn.addEventListener('click', openBadgeModal);
@@ -2629,7 +2832,6 @@
             $('mmMap').addEventListener('click', () => { minimapCanvas.classList.toggle('expanded'); mobileMenu.classList.remove('active'); });
 
             // ==================== KARAKTER ÇİZİMİ ====================
-            // customPixels: 16x16 boyama varsa onu kullanır, yoksa varsayılan prosedürel çizim
             function drawCustomPixels(ctx, x, y, size, pixels) {
                 const px = size / 16;
                 for (let r = 0; r < 16; r++) {
@@ -2644,9 +2846,7 @@
             }
 
             function drawChar(ctx, x, y, size, ch, prof, facing, frame, isPlayer, labelText, labelColor) {
-                // Pixel boyama varsa onu kullan
                 if (prof && prof.customPixels && Array.isArray(prof.customPixels) && prof.customPixels.length === 16) {
-                    // Gölge
                     ctx.fillStyle = 'rgba(0,0,0,0.3)';
                     ctx.beginPath();
                     ctx.ellipse(x + size / 2, y + size - 1, size / 2.2, 2, 0, 0, Math.PI * 2);
@@ -2935,7 +3135,6 @@
                 ctx.fillText('🔥', x, y - size - 6);
             }
             function drawStreetLight(ctx, l, camX, camY, nf) {
-                // Sadece direk ve beyaz nokta; gece overlay'de aydınlatma çizilir
                 const x = l.x - camX, y = l.y - camY;
                 ctx.fillStyle = '#3a3a4a';
                 ctx.fillRect(x - 2, y - 30, 4, 30);
@@ -3238,11 +3437,9 @@
                 ctx.strokeStyle = '#8a4a4a'; ctx.lineWidth = 6; ctx.setLineDash([12, 8]);
                 ctx.strokeRect(-camX, -camY, world.width, world.height);
                 ctx.setLineDash([]);
-                // Gece overlay + yumuşak aydınlatma
                 if (nf > 0.01) {
                     ctx.fillStyle = `rgba(8, 12, 30, ${nf * 0.7})`;
                     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-                    // Yumuşak aydınlatma (kademeli, göz almayan)
                     ctx.globalCompositeOperation = 'lighter';
                     for (const l of world.streetLights) {
                         if (l.x < camX - 100 || l.x > camX + CANVAS_W + 100) continue;
@@ -3582,7 +3779,7 @@
             addChatMessage('SİSTEM', 'piksel dünya\'ya hoş geldin!', '#ffd966');
             addChatMessage('SİSTEM', '🏠 H ile ev al | 🚀 Portaldan uzaya git', '#6ae8c4');
             addChatMessage('SİSTEM', '♟️ Uzayda Satranç gezegeni var! İki kişi oynayabilir.', '#ffd966');
-            addChatMessage('SİSTEM', '✉️ Arkadaşınla özel mesaj için Y tuşuna bas', '#a08aff');
+            addChatMessage('SİSTEM', '✉️ Arkadaşınla özel mesaj için 👥 Arkadaşlar menüsünü kullan', '#a08aff');
             addChatMessage('SİSTEM', '🎨 Profilden karakterini pixel pixel boyayabilirsin!', '#ffa0ff');
             resetGameTime();
             openModal(roomModal);
