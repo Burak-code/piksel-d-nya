@@ -525,7 +525,8 @@
         <div id="levelup"></div>
     </div>
 
-    <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+    <!-- ✅ MQTT 4.3.7 — tarayıcıda global `mqtt` değişkeni sağlar -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 
     <script>
         (function() {
@@ -630,10 +631,12 @@
             const TOPIC_PREFIX = 'pikseldunya_v11/';
             const LOBBY_TOPIC = 'pikseldunya_v11_lobby';
             const activeRooms = new Map();
+
+            // ✅ Güncellenmiş broker listesi (eclipseprojects kapatıldı, hivemq eklendi)
             const BROKER_URLS = [
                 'wss://broker.emqx.io:8084/mqtt',
+                'wss://broker.hivemq.com:8884/mqtt',
                 'wss://test.mosquitto.org:8081/mqtt',
-                'wss://mqtt.eclipseprojects.io:443/mqtt',
             ];
             let currentBrokerIndex = 0;
 
@@ -1532,56 +1535,130 @@
             }
 
             // ==================== MQTT ====================
+            // ✅ Tamamen yeniden yazıldı: broker fallback + timeout + temiz reconnect
+            let connectAttemptTimer = null;
+
             function connectMQTT(room, password, roomName) {
-                if (client) { try { client.end(true); } catch(e){} client = null; }
-                if (typeof mqtt === 'undefined') { roomStatus.textContent = '❌ MQTT yüklenemedi!'; return; }
+                // Temizlik
+                if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
+                if (client) { try { client.removeAllListeners(); client.end(true); } catch(e){} client = null; }
+
+                if (typeof mqtt === 'undefined') {
+                    roomStatus.textContent = '❌ MQTT kütüphanesi yüklenemedi!';
+                    statusEl.textContent = '❌ mqtt.js yok';
+                    setConnectionStatus('❌ MQTT kütüphanesi yüklenemedi — sayfayı yenile', false);
+                    return;
+                }
+
                 isConnected = false;
                 roomStatus.textContent = 'bağlanıyor: ' + (roomName || room);
                 statusEl.textContent = '🔌 bağlanıyor...';
-                setConnectionStatus('🔌 MQTT bağlanıyor...', false);
+                setConnectionStatus(`🔌 MQTT bağlanıyor (${currentBrokerIndex + 1}/${BROKER_URLS.length})...`, false);
+
                 const brokerUrl = BROKER_URLS[currentBrokerIndex];
                 const clientId = 'pixel_' + player.id + '_' + Math.random().toString(36).substr(2, 6);
+
+                let connected = false;
+                let failed = false;
+
+                console.log(`[MQTT] Deniyorum: ${brokerUrl}`);
+
                 try {
-                    client = mqtt.connect(brokerUrl, { clientId, clean:true, connectTimeout:20000, reconnectPeriod:5000, keepalive:30, protocolVersion:4 });
+                    client = mqtt.connect(brokerUrl, {
+                        clientId,
+                        clean: true,
+                        connectTimeout: 8000,
+                        reconnectPeriod: 0, // ✅ manuel yeniden bağlanacağız
+                        keepalive: 30,
+                        protocolVersion: 4,
+                    });
                 } catch (e) {
-                    roomStatus.textContent = '❌ ' + e.message;
-                    currentBrokerIndex = (currentBrokerIndex + 1) % BROKER_URLS.length;
-                    setTimeout(() => connectMQTT(room, password, roomName), 500);
+                    console.error('[MQTT] connect hatası:', e);
+                    switchBrokerAndRetry(room, password, roomName, e.message);
                     return;
                 }
-                let connected = false;
+
+                // ✅ 8 saniye içinde bağlanamazsa broker değiştir
+                connectAttemptTimer = setTimeout(() => {
+                    if (!connected && !failed) {
+                        failed = true;
+                        console.warn('[MQTT] Zaman aşımı, broker değiştiriliyor');
+                        try { client.removeAllListeners(); client.end(true); } catch(e){}
+                        client = null;
+                        switchBrokerAndRetry(room, password, roomName, 'timeout');
+                    }
+                }, 9000);
+
                 client.on('connect', () => {
-                    connected = true; isConnected = true;
+                    if (failed) return;
+                    connected = true;
+                    if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
+
+                    console.log('[MQTT] ✅ Bağlandı:', brokerUrl);
+                    isConnected = true;
                     currentRoom = room; roomPassword = password; currentRoomName = roomName || room;
                     statusEl.textContent = '🟢 ' + (roomName || room);
                     setConnectionStatus('✅ MQTT bağlandı!', true);
+
                     const topic = TOPIC_PREFIX + room + '/#';
                     client.subscribe(topic, { qos: 0 }, (err) => {
                         if (err) { roomStatus.textContent = '❌ abone hatası'; return; }
-                        client.subscribe(LOBBY_TOPIC, { qos: 0 });
-                        client.publish(LOBBY_TOPIC, JSON.stringify({ type:'room_announce', id:player.id, roomId:room, name:roomName || room, hasPassword:!!password, count:1, ts:Date.now() }));
-                        roomStatus.textContent = '✅ ' + (roomName || room);
-                        publishPlayerUpdate();
-                        client.publish(TOPIC_PREFIX + room + '/requestPlayers', JSON.stringify({ from:player.id, name:player.name, password:password || '' }));
-                        addChatMessage('SİSTEM', 'odaya katıldın: ' + (roomName || room), '#ffd966');
-                        closeModal(roomModal);
-                        showToast('🎮 ' + (roomName || room) + ' odasına katıldın!');
-                        client.publish(TOPIC_PREFIX + room + '/timeSyncRequest', JSON.stringify({ from:player.id, password:password || '' }));
-                        if (!roomTimeOwnerId) roomTimeOwnerId = player.id;
+                        client.subscribe(LOBBY_TOPIC, { qos: 0 }, () => {
+                            client.publish(LOBBY_TOPIC, JSON.stringify({
+                                type:'room_announce', id:player.id, roomId:room,
+                                name:roomName || room, hasPassword:!!password, count:1, ts:Date.now()
+                            }));
+                            roomStatus.textContent = '✅ ' + (roomName || room);
+                            publishPlayerUpdate();
+                            client.publish(TOPIC_PREFIX + room + '/requestPlayers', JSON.stringify({ from:player.id, name:player.name, password:password || '' }));
+                            addChatMessage('SİSTEM', 'odaya katıldın: ' + (roomName || room), '#ffd966');
+                            closeModal(roomModal);
+                            showToast('🎮 ' + (roomName || room) + ' odasına katıldın!');
+                            client.publish(TOPIC_PREFIX + room + '/timeSyncRequest', JSON.stringify({ from:player.id, password:password || '' }));
+                            if (!roomTimeOwnerId) roomTimeOwnerId = player.id;
+                        });
                     });
                 });
+
                 client.on('message', (topic, message) => {
                     try { handleMQTTMessage(topic, JSON.parse(message.toString())); } catch(e) {}
                 });
+
                 client.on('error', (err) => {
-                    if (!connected) {
-                        currentBrokerIndex = (currentBrokerIndex + 1) % BROKER_URLS.length;
-                        try { client.end(true); } catch(e) {}
-                        client = null;
-                        setTimeout(() => connectMQTT(room, password, roomName), 500);
+                    if (failed || connected) return;
+                    failed = true;
+                    console.warn('[MQTT] Hata:', err.message || err);
+                    if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
+                    try { client.removeAllListeners(); client.end(true); } catch(e){}
+                    client = null;
+                    switchBrokerAndRetry(room, password, roomName, err.message);
+                });
+
+                client.on('offline', () => {
+                    if (connected) {
+                        isConnected = false;
+                        statusEl.textContent = '🟡 bağlantı koptu, yeniden...';
+                        setConnectionStatus('🟡 Bağlantı koptu, yeniden bağlanılıyor...', false);
                     }
                 });
-                client.on('offline', () => { isConnected = false; });
+
+                client.on('close', () => {
+                    if (connected && !failed) {
+                        // Beklenmedik kapanma — yeniden bağlan
+                        connected = false;
+                        isConnected = false;
+                        if (client) { try { client.end(true); } catch(e){} client = null; }
+                        setTimeout(() => connectMQTT(room, password, roomName), 1000);
+                    }
+                });
+            }
+
+            function switchBrokerAndRetry(room, password, roomName, reason) {
+                currentBrokerIndex = (currentBrokerIndex + 1) % BROKER_URLS.length;
+                const msg = `🔄 Broker değiştiriliyor (${currentBrokerIndex + 1}/${BROKER_URLS.length}) — ${reason || ''}`;
+                statusEl.textContent = msg;
+                setConnectionStatus(msg, false);
+                setTimeout(() => connectMQTT(room, password, roomName), 800);
             }
 
             function handleMQTTMessage(topic, data) {
@@ -3830,10 +3907,17 @@
                 connectMQTT(getRoomId(name), pw, name);
             });
             function connectLobbyOnly() {
-                if (typeof mqtt === 'undefined') return;
+                if (typeof mqtt === 'undefined') {
+                    console.warn('[LOBBY] mqtt.js yüklü değil');
+                    return;
+                }
                 try {
-                    lobbyClient = mqtt.connect(BROKER_URLS[0], { clientId: 'lobby_' + Math.random().toString(36).substr(2, 8), clean:true, connectTimeout:10000, reconnectPeriod:5000 });
+                    lobbyClient = mqtt.connect(BROKER_URLS[0], {
+                        clientId: 'lobby_' + Math.random().toString(36).substr(2, 8),
+                        clean:true, connectTimeout:10000, reconnectPeriod:5000
+                    });
                     lobbyClient.on('connect', () => {
+                        console.log('[LOBBY] ✅ bağlandı');
                         lobbyClient.subscribe(LOBBY_TOPIC, { qos: 0 });
                         lobbyClient.publish(LOBBY_TOPIC, JSON.stringify({ type:'room_request', id:'lobby' }));
                     });
@@ -3847,7 +3931,8 @@
                             }
                         } catch(e) {}
                     });
-                } catch(e) {}
+                    lobbyClient.on('error', (e) => console.warn('[LOBBY] hata:', e.message));
+                } catch(e) { console.warn('[LOBBY] bağlantı hatası:', e); }
             }
             setTimeout(connectLobbyOnly, 800);
             requestAnimationFrame(gameLoop);
