@@ -18,7 +18,7 @@
         .panel span { color:#ffd966; font-weight:bold; white-space:nowrap; }
 
         .top-left { position:absolute; top:max(8px, env(safe-area-inset-top)); left:8px; display:flex; flex-direction:column; gap:6px; max-width:65%; }
-        .top-right { position:absolute; top:max(8px, env(safe-area-inset-top)); right:8px; display:flex; flex-direction:column; gap:6px; align-items:flex-end; max-width:45%; }
+        .top-right { position:absolute; top:calc(max(8px, env(safe-area-inset-top)) + 100px); right:8px; display:flex; flex-direction:column; gap:6px; align-items:flex-end; max-width:45%; z-index:16; }
 
         .xp-bar { width:100%; height:6px; background:#0e1a2a; border-radius:3px; overflow:hidden; margin-top:4px; }
         .xp-fill { height:100%; background:linear-gradient(90deg, #4aa4e8, #6ae8c4); transition:width 0.3s; border-radius:3px; }
@@ -167,7 +167,8 @@
             .chat-box { width:150px; font-size:10px; }
             .chat-toggle { padding:5px 10px; font-size:11px; }
             .room-list { width:130px; font-size:10px; max-height:100px; }
-            #interact-hint { bottom:290px; font-size:11px; padding:5px 10px; }
+            #interact-hint { top:max(70px, env(safe-area-inset-top) + 62px); bottom:auto; font-size:11px; padding:5px 10px; }
+            .top-right { top:calc(max(8px, env(safe-area-inset-top)) + 70px); }
             .modal-content { padding:14px; }
             .job-list { grid-template-columns:1fr; }
             .top-right { max-width:45%; }
@@ -219,6 +220,7 @@
             <div id="mobile-actions">
                 <button class="action-btn" id="mobileInteractBtn">👆<small>etkileşim</small></button>
                 <button class="action-btn" id="mobileWorkBtn">💼<small>çalış</small></button>
+                <button class="action-btn" id="mobileFriendBtn">👥<small>arkadaş</small></button>
             </div>
             <button id="mobile-menu-btn">☰ menü</button>
             <div id="mobile-menu">
@@ -230,12 +232,13 @@
                 <button class="mobile-menu-btn" id="mmBadge"><span>🏆</span><span>Rozet</span></button>
                 <button class="mobile-menu-btn" id="mmLb"><span>📊</span><span>Sıralama</span></button>
                 <button class="mobile-menu-btn" id="mmShopSetup"><span>🏪</span><span>Dükkan</span></button>
+                <button class="mobile-menu-btn" id="mmMarsBuild"><span>🏗️</span><span>İnşa</span></button>
                 <button class="mobile-menu-btn" id="mmMap"><span>🗺️</span><span>Harita</span></button>
             </div>
 
             <div class="bottom-bar">
                 <div class="controls-info">
-                    WASD | E: etkileşim | Q: çalış | H: ev al | J: meslek | P: profil | R: dükkan
+                    WASD | E: etkileşim | Q: çalış | H: ev al | J: meslek | P: profil | R: dükkan | F: arkadaş ekle
                 </div>
                 <div class="trade-panel">
                     <span>🪙 <span id="tradeMoneyDisplay">0</span></span>
@@ -445,6 +448,17 @@
             </div>
         </div>
 
+        <div class="modal" id="marsBuildModal">
+            <div class="modal-content">
+                <h2>🏗️ Marslar'da İnşa Et</h2>
+                <div style="color:#a0b8d0;font-size:11px;margin-bottom:10px;">Bir bina seç, sonra yerleştirmek için E'ye bas</div>
+                <div id="marsBuildList" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;"></div>
+                <div style="margin-top:10px;">
+                    <button class="cancel" id="cancelMarsBuildBtn">Kapat</button>
+                </div>
+            </div>
+        </div>
+
         <div id="toast"></div>
         <div id="levelup"></div>
     </div>
@@ -464,13 +478,23 @@
             const SPACE_SPEED = 2.6;
             const INTERACT_RANGE = 70;
 
-            // Zaman: 1 oyun saati = 5 dakika
-            const MS_PER_GAME_HOUR = 5 * 60 * 1000;
+            // Zaman: dünyada 1 oyun saati = 5 dakika, uzayda 1 oyun saati = 1 dakika (hızlı akar)
+            const MS_PER_GAME_HOUR_WORLD = 5 * 60 * 1000;
+            const MS_PER_GAME_HOUR_SPACE = 60 * 1000;
             const TIME_EPOCH = 1704067200000;
 
+            // Toplanan oyun-saati biriktirici: gerçek zamanla değil, dt ile artar,
+            // böylece uzayda geçirilen süre çok daha hızlı oyun-saatine dönüşür.
+            let accumulatedGameHours = (Date.now() - TIME_EPOCH) / MS_PER_GAME_HOUR_WORLD;
+
+            function advanceGameTime(dt) {
+                const msPerHour = (typeof player !== 'undefined' && (player.dimension === 'space' || player.dimension === 'mars'))
+                    ? MS_PER_GAME_HOUR_SPACE : MS_PER_GAME_HOUR_WORLD;
+                accumulatedGameHours += dt / msPerHour;
+            }
+
             function getGameTime() {
-                const elapsed = Date.now() - TIME_EPOCH;
-                const totalGameHours = elapsed / MS_PER_GAME_HOUR;
+                const totalGameHours = accumulatedGameHours;
                 const day = Math.floor(totalGameHours / 24) + 1;
                 const hourOfDay = totalGameHours % 24;
                 return { day, hourOfDay };
@@ -606,8 +630,26 @@
                 asteroids: [],
             };
 
+            // ==================== MARSLAR (İNŞA GEZEGENİ) ====================
+            const MARS_BUILDINGS = [
+                { id:'house', icon:'🏠', name:'Ev', price:200, w:50, h:50 },
+                { id:'farm', icon:'🌾', name:'Çiftlik', price:150, w:60, h:40 },
+                { id:'tower', icon:'🗼', name:'Kule', price:400, w:36, h:80 },
+                { id:'well', icon:'⛲', name:'Kuyu', price:100, w:36, h:36 },
+                { id:'tree', icon:'🌳', name:'Ağaç', price:50, w:30, h:40 },
+                { id:'fence', icon:'🚧', name:'Çit', price:30, w:40, h:16 },
+            ];
+            const mars = {
+                width: 2400, height: 2400,
+                buildings: [], // { id, type, x, y, ownerId, ownerName }
+                entryX: 1200, entryY: 1200,
+            };
+            let marsBuildMode = null; // seçili bina türü, yerleştirme modunda
+
             const otherPlayers = new Map();
             const camera = { x:0, y:0 };
+            let pendingFriendTarget = null;
+            let pendingFriendName = null;
 
             let client = null;
             let lobbyClient = null;
@@ -724,6 +766,11 @@
             const setupShopBtn = $('setupShopBtn');
             const cancelSetupShopBtn = $('cancelSetupShopBtn');
 
+            const marsBuildModal = $('marsBuildModal');
+            const marsBuildList = $('marsBuildList');
+            const cancelMarsBuildBtn = $('cancelMarsBuildBtn');
+            cancelMarsBuildBtn.addEventListener('click', () => closeModal(marsBuildModal));
+
             const houseBtn = $('houseBtn');
             const workBtn = $('workBtn');
             const jobBtn = $('jobBtn');
@@ -739,6 +786,7 @@
             const mobileActions = $('mobile-actions');
             const mobileWorkBtn = $('mobileWorkBtn');
             const mobileInteractBtn = $('mobileInteractBtn');
+            const mobileFriendBtn = $('mobileFriendBtn');
             const mobileMenuBtn = $('mobile-menu-btn');
             const mobileMenu = $('mobile-menu');
 
@@ -843,6 +891,8 @@
                 if (k === 'l') openLbModal();
                 if (k === 'r') openShopSetup();
                 if (k === 'h') openHouseModal();
+                if (k === 'f') sendFriendRequest();
+                if (k === 'm' && player.dimension === 'mars') openMarsBuildMenu();
             });
             window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
@@ -1165,7 +1215,7 @@
 
             // ==================== ÇALIŞMA ====================
             function work() {
-                if (player.dimension === 'space') { showToast('uzayda çalışamazsın 🚀'); return; }
+                if (player.dimension === 'space' || player.dimension === 'mars') { showToast('burada çalışamazsın 🚀'); return; }
                 let zone = null, zoneDist = Infinity;
                 for (const z of world.workZones) {
                     const d = Math.hypot(z.x - player.x, z.y - player.y);
@@ -1250,11 +1300,17 @@
                     let nearest = null, nearestDist = INTERACT_RANGE + 30, nearestType = null;
                     const dPortal = Math.hypot(space.portal.x - player.x, space.portal.y - player.y);
                     if (dPortal < space.portal.radius + 40) { nearest = space.portal; nearestDist = dPortal; nearestType = 'spacePortal'; }
+                    for (const p of space.planets) {
+                        if (!p.enterable) continue;
+                        const d = Math.hypot(p.x - player.x, p.y - player.y);
+                        if (d < p.radius + 50 && d < nearestDist) { nearestDist = d; nearest = p; nearestType = 'marsPlanet'; }
+                    }
                     for (const a of space.aliens) {
                         const d = Math.hypot(a.x - player.x, a.y - player.y);
                         if (d < nearestDist) { nearestDist = d; nearest = a; nearestType = 'alien'; }
                     }
                     if (nearestType === 'spacePortal') { returnToWorld(); return; }
+                    if (nearestType === 'marsPlanet') { goToMars(); return; }
                     if (nearestType === 'alien') {
                         chatBox.classList.add('active');
                         const lines = nearest.dialogue;
@@ -1268,6 +1324,23 @@
                         return;
                     }
                     showToast('uzayda sadece portal ve uzaylılar var 🚀');
+                    return;
+                }
+
+                if (player.dimension === 'mars') {
+                    // Marslar'da etkileşim: dönüş taşı ve inşa
+                    const d = Math.hypot(mars.entryX - player.x, mars.entryY - player.y);
+                    if (d < 60) { returnFromMars(); return; }
+                    if (marsBuildMode) { placeMarsBuilding(); return; }
+                    // Kendi binasını kaldır
+                    let nearestB = null, nearestBDist = 50;
+                    for (const b of mars.buildings) {
+                        if (b.ownerId !== player.id) continue;
+                        const bd = Math.hypot(b.x - player.x, b.y - player.y);
+                        if (bd < nearestBDist) { nearestBDist = bd; nearestB = b; }
+                    }
+                    if (nearestB) { removeMarsBuilding(nearestB); return; }
+                    showToast('🏗️ inşa etmek için menüden bina seç');
                     return;
                 }
 
@@ -1321,7 +1394,7 @@
                     if (d < nearestDist) { nearestDist = d; nearest = npc; nearestType = 'npc'; }
                 }
                 for (const p of otherPlayers.values()) {
-                    if (p.dimension === 'space') continue;
+                    if (p.dimension === 'space' || p.dimension === 'mars') continue;
                     const d = Math.hypot(p.x - player.x, p.y - player.y);
                     if (d < nearestDist) { nearestDist = d; nearest = p; nearestType = 'player'; }
                 }
@@ -1384,10 +1457,18 @@
                 if (nearestType === 'player') {
                     chatBox.classList.add('active');
                     addChatMessage('BİLGİ', `${nearest.name} | ❤️${nearest.hp} | 💰${nearest.money}`, '#b0d0ff');
+                    if (player.friends.includes(nearest.name)) {
+                        addChatMessage('BİLGİ', `${nearest.name} zaten arkadaşın ✅`, '#a0e0a0');
+                    } else {
+                        addChatMessage('BİLGİ', `${nearest.name} arkadaş eklemek için F'ye bas`, '#ffd966');
+                        pendingFriendTarget = nearest.id;
+                        pendingFriendName = nearest.name;
+                    }
                     return;
                 }
             }
             mobileInteractBtn.addEventListener('click', interactWithNearest);
+            mobileFriendBtn.addEventListener('click', sendFriendRequest);
 
             // ==================== UZAY GEÇİŞİ ====================
             function goToSpace() {
@@ -1423,6 +1504,89 @@
                 showToast('🌍 Dünyaya döndün!', 2000);
                 addChatMessage('PORTAL', `${player.name} dünyaya döndü`, '#a0d8ff');
                 publishPlayerUpdate();
+            }
+
+            // ==================== MARSLAR GEÇİŞİ ====================
+            function goToMars() {
+                player.dimension = 'mars';
+                player.x = mars.entryX + 100;
+                player.y = mars.entryY;
+                camera.x = player.x - CANVAS_W / 2;
+                camera.y = player.y - CANVAS_H / 2;
+                locationLabel.textContent = '🪐 Marslar';
+                document.getElementById('game-container').style.background = '#3fae4a';
+                showToast('🪐 Marslar gezegenine indin! Kendi köyünü kur 🏗️', 2800);
+                addChatMessage('PORTAL', `${player.name} Marslar'a gitti!`, '#a0ffb0');
+                publishPlayerUpdate();
+            }
+
+            function returnFromMars() {
+                player.dimension = 'space';
+                player.x = space.planets.find(p => p.name === 'Marslar').x + 150;
+                player.y = space.planets.find(p => p.name === 'Marslar').y;
+                camera.x = player.x - CANVAS_W / 2;
+                camera.y = player.y - CANVAS_H / 2;
+                locationLabel.textContent = '🚀 Uzay';
+                document.getElementById('game-container').style.background = '#000010';
+                marsBuildMode = null;
+                showToast('🚀 Uzaya döndün', 1800);
+                publishPlayerUpdate();
+            }
+
+            function openMarsBuildMenu() {
+                if (player.dimension !== 'mars') { showToast('sadece Marslar\'da inşa edebilirsin 🪐'); return; }
+                const rows = MARS_BUILDINGS.map(b =>
+                    `<div class="room-item" data-bid="${b.id}" style="width:100%;"><span class="name">${b.icon} ${b.name}</span><span class="count">${b.price}💰</span></div>`
+                ).join('');
+                marsBuildList.innerHTML = rows;
+                marsBuildList.querySelectorAll('.room-item').forEach(el => {
+                    el.onclick = () => {
+                        marsBuildMode = el.dataset.bid;
+                        closeModal(marsBuildModal);
+                        const def = MARS_BUILDINGS.find(b => b.id === marsBuildMode);
+                        showToast(`🏗️ ${def.icon} ${def.name} seçildi — yerleştirmek için E'ye bas`, 2500);
+                    };
+                });
+                openModal(marsBuildModal);
+            }
+
+            function placeMarsBuilding() {
+                const def = MARS_BUILDINGS.find(b => b.id === marsBuildMode);
+                if (!def) { marsBuildMode = null; return; }
+                if (player.money < def.price) { showToast(`❌ ${def.price}💰 gerekli`); marsBuildMode = null; return; }
+                // Girişe çok yakına inşa engeli
+                if (Math.hypot(player.x - mars.entryX, player.y - mars.entryY) < 80) {
+                    showToast('❌ giriş noktasına çok yakın'); return;
+                }
+                // Çakışma kontrolü
+                for (const b of mars.buildings) {
+                    if (Math.hypot(b.x - player.x, b.y - player.y) < 45) { showToast('❌ buraya çok yakın başka bina var'); return; }
+                }
+                player.money -= def.price;
+                mars.buildings.push({
+                    id: 'mb_' + Math.random().toString(36).substr(2, 9),
+                    type: def.id, x: player.x, y: player.y + 40,
+                    ownerId: player.id, ownerName: player.name,
+                });
+                updateUI();
+                showToast(`✅ ${def.icon} ${def.name} inşa edildi! -${def.price}💰`);
+                addXP(15);
+                marsBuildMode = null;
+                publishMarsUpdate();
+                publishPlayerUpdate();
+            }
+
+            function removeMarsBuilding(b) {
+                const idx = mars.buildings.indexOf(b);
+                if (idx >= 0) mars.buildings.splice(idx, 1);
+                showToast('🗑️ bina kaldırıldı');
+                publishMarsUpdate();
+            }
+
+            function publishMarsUpdate() {
+                if (!client || !isConnected || !currentRoom) return;
+                const myBuildings = mars.buildings.filter(b => b.ownerId === player.id);
+                client.publish(TOPIC_PREFIX + currentRoom + '/marsUpdate', JSON.stringify({ id:player.id, buildings:myBuildings, password:roomPassword || '' }));
             }
 
             function openShop(shop) {
@@ -1475,8 +1639,18 @@
                 const name = shopNameInput.value.trim() || 'Dükkanım';
                 const vIdx = parseInt(villageSelect.dataset.selected || '0');
                 const v = world.villages[vIdx];
-                const shopX = v.x + v.w / 2 + (Math.random() - 0.5) * 100;
-                const shopY = v.y + v.h / 2 + (Math.random() - 0.5) * 100;
+                // Kendi evinin yanına yerleştir (üstüne binmesin), yoksa köy merkezine yakın boş bir yere koy
+                const myHouse = player.ownedHouse ? world.houses.find(h => h.id === player.ownedHouse) : null;
+                let shopX, shopY;
+                if (myHouse) {
+                    shopX = myHouse.x + 110;
+                    shopY = myHouse.y;
+                } else {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = 160 + Math.random() * 60;
+                    shopX = v.x + v.w / 2 + Math.cos(angle) * radius;
+                    shopY = v.y + v.h / 2 + Math.sin(angle) * radius;
+                }
                 const shopId = 'shop_' + player.id;
                 const existingIdx = world.shops.findIndex(s => s.id === shopId);
                 if (existingIdx >= 0) world.shops.splice(existingIdx, 1);
@@ -1596,6 +1770,7 @@
             $('mmBadge').addEventListener('click', () => { openBadgeModal(); mobileMenu.classList.remove('active'); });
             $('mmLb').addEventListener('click', () => { openLbModal(); mobileMenu.classList.remove('active'); });
             $('mmShopSetup').addEventListener('click', () => { openShopSetup(); mobileMenu.classList.remove('active'); });
+            $('mmMarsBuild').addEventListener('click', () => { openMarsBuildMenu(); mobileMenu.classList.remove('active'); });
             $('mmMap').addEventListener('click', () => { minimapCanvas.classList.toggle('expanded'); mobileMenu.classList.remove('active'); });
 
             function drawChar(ctx, x, y, size, ch, prof, facing, frame, isPlayer, labelText, labelColor) {
@@ -1777,6 +1952,7 @@
                     { x: 800, y: 600, radius: 90, color1:'#4a2a8a', color2:'#8a5aaa', ring: false, name:'Zorg' },
                     { x: 2200, y: 1400, radius: 130, color1:'#8a3a2a', color2:'#d46a3a', ring: true, name:'Kızıl' },
                     { x: 500, y: 1600, radius: 70, color1:'#2a5a8a', color2:'#4a8aaa', ring: false, name:'Mavi' },
+                    { x: 1500, y: 300, radius: 100, color1:'#2a6a2a', color2:'#5ad46a', ring: false, name:'Marslar', enterable:true },
                 );
                 // Asteroitler
                 for (let i = 0; i < 25; i++) {
@@ -1999,6 +2175,14 @@
                         else world.shops.push(shop);
                     }
                 }
+                else if (topic === base + '/marsUpdate') {
+                    if (data.id === player.id) return;
+                    // Önce bu oyuncuya ait eski binaları kaldır, sonra günceli ekle
+                    for (let i = mars.buildings.length - 1; i >= 0; i--) {
+                        if (mars.buildings[i].ownerId === data.id) mars.buildings.splice(i, 1);
+                    }
+                    if (data.buildings) for (const b of data.buildings) mars.buildings.push(b);
+                }
                 else if (topic === base + '/houseUpdate') {
                     if (data.id === player.id) return;
                     const house = world.houses.find(h => h.id === data.houseId);
@@ -2026,6 +2210,25 @@
                 if (!client || !isConnected || !currentRoom) return;
                 data.password = roomPassword || '';
                 client.publish(TOPIC_PREFIX + currentRoom + '/trade', JSON.stringify(data));
+            }
+            function sendFriendRequest() {
+                if (!pendingFriendTarget) { showToast('önce bir oyuncuyla etkileşime geç (E)'); return; }
+                if (player.friends.includes(pendingFriendName)) { showToast(`${pendingFriendName} zaten arkadaşın ✅`); pendingFriendTarget = null; return; }
+                if (!client || !isConnected || !currentRoom) { showToast('bağlantı yok ❌'); return; }
+                client.publish(TOPIC_PREFIX + currentRoom + '/friendRequest', JSON.stringify({
+                    from: player.id, fromName: player.name, to: pendingFriendTarget, password: roomPassword || '',
+                }));
+                player.friends.push(pendingFriendName);
+                player.stats.friendCount++;
+                updateQuestProgress('friend', 1);
+                updateUI();
+                showToast(`👥 ${pendingFriendName} arkadaş eklendi!`);
+                addChatMessage('ARKADAŞ', `${player.name}, ${pendingFriendName} ile arkadaş oldu`, '#ffa0ff');
+                addXP(25);
+                unlockBadge('first_friend');
+                pendingFriendTarget = null;
+                pendingFriendName = null;
+                publishPlayerUpdate();
             }
             function publishPlayerLeave() {
                 if (!client || !isConnected || !currentRoom) return;
@@ -2113,6 +2316,7 @@
             }
 
             function update(dt) {
+                advanceGameTime(dt);
                 let dx = 0, dy = 0;
                 if (keys['w'] || keys['arrowup']) dy -= 1;
                 if (keys['s'] || keys['arrowdown']) dy += 1;
@@ -2126,7 +2330,7 @@
                 } else if (mag > 0.1) {
                     dx /= mag; dy /= mag;
                     const speedMul = Math.min(1, mag);
-                    const spd = player.dimension === 'space' ? SPACE_SPEED : MOVE_SPEED;
+                    const spd = (player.dimension === 'space' || player.dimension === 'mars') ? SPACE_SPEED : MOVE_SPEED;
                     player.x += dx * spd * speedMul;
                     player.y += dy * spd * speedMul;
                     if (Math.abs(dx) > Math.abs(dy)) player.facing = dx > 0 ? 'right' : 'left';
@@ -2135,8 +2339,8 @@
                     if (player.animTimer > 140) { player.animTimer = 0; player.animFrame = (player.animFrame + 1) % 4; }
                 } else player.animFrame = 0;
 
-                const boundsW = player.dimension === 'space' ? space.width : world.width;
-                const boundsH = player.dimension === 'space' ? space.height : world.height;
+                const boundsW = player.dimension === 'space' ? space.width : (player.dimension === 'mars' ? mars.width : world.width);
+                const boundsH = player.dimension === 'space' ? space.height : (player.dimension === 'mars' ? mars.height : world.height);
                 player.x = Math.max(PLAYER_SIZE / 2, Math.min(boundsW - PLAYER_SIZE / 2, player.x));
                 player.y = Math.max(PLAYER_SIZE / 2, Math.min(boundsH - PLAYER_SIZE / 2, player.y));
 
@@ -2218,9 +2422,30 @@
                 if (player.dimension === 'space') {
                     const dPortal = Math.hypot(space.portal.x - player.x, space.portal.y - player.y);
                     if (dPortal < space.portal.radius + 40) hint = '🌀 E: Dünyaya dön';
-                    else for (const a of space.aliens) {
-                        const d = Math.hypot(a.x - player.x, a.y - player.y);
-                        if (d < hintDist) { hint = `👽 E: ${a.name}`; hintDist = d; }
+                    else {
+                        for (const p of space.planets) {
+                            if (!p.enterable) continue;
+                            const d = Math.hypot(p.x - player.x, p.y - player.y);
+                            if (d < p.radius + 50 && d < hintDist) { hint = `🪐 E: ${p.name}'a in`; hintDist = d; }
+                        }
+                        if (!hint) for (const a of space.aliens) {
+                            const d = Math.hypot(a.x - player.x, a.y - player.y);
+                            if (d < hintDist) { hint = `👽 E: ${a.name}`; hintDist = d; }
+                        }
+                    }
+                } else if (player.dimension === 'mars') {
+                    const dEntry = Math.hypot(mars.entryX - player.x, mars.entryY - player.y);
+                    if (dEntry < 60) hint = '🌀 E: Uzaya dön';
+                    else if (marsBuildMode) {
+                        const def = MARS_BUILDINGS.find(b => b.id === marsBuildMode);
+                        hint = `🏗️ E: ${def ? def.icon + ' ' + def.name : 'bina'} yerleştir`;
+                    } else {
+                        for (const b of mars.buildings) {
+                            if (b.ownerId !== player.id) continue;
+                            const d = Math.hypot(b.x - player.x, b.y - player.y);
+                            if (d < 50) { hint = '🗑️ E: binayı kaldır'; break; }
+                        }
+                        if (!hint) hint = '🏗️ M: inşa menüsü';
                     }
                 } else {
                     for (const p of world.portals) {
@@ -2577,19 +2802,8 @@
                 const x = l.x - camX, y = l.y - camY;
                 ctx.fillStyle = '#3a3a4a';
                 ctx.fillRect(x - 2, y - 30, 4, 30);
-                // Işık halkası gece
-                if (nf > 0.05) {
-                    const grad = ctx.createRadialGradient(x, y - 32, 0, x, y - 32, 100);
-                    grad.addColorStop(0, `rgba(255,225,140,${0.55 * nf})`);
-                    grad.addColorStop(0.4, `rgba(255,215,120,${0.28 * nf})`);
-                    grad.addColorStop(1, 'rgba(255,200,100,0)');
-                    ctx.fillStyle = grad;
-                    ctx.beginPath();
-                    ctx.arc(x, y - 32, 100, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                // Lamba çekirdeği
-                ctx.fillStyle = nf > 0.3 ? '#fff5c0' : '#ffd966';
+                // Lamba çekirdeği (ışık halkası gece overlay aşamasında tek seferde çiziliyor, burada tekrar gradient çizilmiyor - performans için)
+                ctx.fillStyle = nf > 0.3 ? '#ffffff' : '#f0f0f0';
                 ctx.beginPath();
                 ctx.arc(x, y - 32, 5, 0, Math.PI * 2);
                 ctx.fill();
@@ -2711,9 +2925,102 @@
                 ctx.fillText(label, x, y - r - 19);
             }
 
+            function drawMars() {
+                const camX = Math.floor(camera.x);
+                const camY = Math.floor(camera.y);
+
+                // Yemyeşil, aydınlık, düz zemin - sadece hafif desenli, kasmayan bir çizim
+                ctx.fillStyle = '#4fd45f';
+                ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+                ctx.fillStyle = '#46c456';
+                const gxStart = Math.floor(camX / 40) * 40;
+                const gyStart = Math.floor(camY / 40) * 40;
+                for (let wx = gxStart; wx < camX + CANVAS_W + 40; wx += 40) {
+                    for (let wy = gyStart; wy < camY + CANVAS_H + 40; wy += 40) {
+                        if ((((wx + wy) / 40) | 0) % 5 === 0) ctx.fillRect(wx - camX, wy - camY, 6, 6);
+                    }
+                }
+
+                // Sınır çizgisi
+                ctx.strokeStyle = '#2a8a3a';
+                ctx.lineWidth = 6;
+                ctx.setLineDash([12, 8]);
+                ctx.strokeRect(-camX, -camY, mars.width, mars.height);
+                ctx.setLineDash([]);
+
+                // Giriş / dönüş noktası
+                const ex = mars.entryX - camX, ey = mars.entryY - camY;
+                if (ex > -80 && ex < CANVAS_W + 80 && ey > -80 && ey < CANVAS_H + 80) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                    ctx.beginPath(); ctx.arc(ex, ey, 55, 0, Math.PI * 2); ctx.fill();
+                    ctx.font = 'bold 26px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🌀', ex, ey);
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.font = 'bold 11px monospace';
+                    const label = 'UZAYA DÖN';
+                    const w = ctx.measureText(label).width;
+                    ctx.fillRect(ex - w / 2 - 6, ey + 40, w + 12, 16);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(label, ex, ey + 48);
+                }
+
+                // Binalar
+                for (const b of mars.buildings) {
+                    const bx = b.x - camX, by = b.y - camY;
+                    if (bx < -80 || bx > CANVAS_W + 80) continue;
+                    if (by < -80 || by > CANVAS_H + 80) continue;
+                    const def = MARS_BUILDINGS.find(d => d.id === b.type) || MARS_BUILDINGS[0];
+                    ctx.font = `bold ${Math.max(def.w, def.h)}px monospace`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(def.icon, bx, by);
+                    if (b.ownerId === player.id) {
+                        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                        ctx.font = 'bold 9px monospace';
+                        ctx.fillText(def.name, bx, by + def.h / 2 + 10);
+                    }
+                }
+
+                // Yerleştirme önizlemesi
+                if (marsBuildMode) {
+                    const def = MARS_BUILDINGS.find(d => d.id === marsBuildMode);
+                    if (def) {
+                        const px = player.x - camX, py = player.y - camY + 40;
+                        ctx.globalAlpha = 0.5;
+                        ctx.font = `bold ${Math.max(def.w, def.h)}px monospace`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(def.icon, px, py);
+                        ctx.globalAlpha = 1;
+                    }
+                }
+
+                // Diğer oyuncular (Marslar'da)
+                for (const p of otherPlayers.values()) {
+                    if (p.dimension !== 'mars') continue;
+                    const ox = p.x - camX, oy = p.y - camY;
+                    if (ox < -80 || ox > CANVAS_W + 80) continue;
+                    if (oy < -80 || oy > CANVAS_H + 80) continue;
+                    const ch = CHARACTERS[p.profile?.charId || 0] || CHARACTERS[0];
+                    drawChar(ctx, ox - PLAYER_SIZE / 2, oy - PLAYER_SIZE / 2, PLAYER_SIZE, ch, p.profile || {}, p.facing, p.animFrame, false, p.name, p.profile?.nameColor || '#ffa0ff');
+                }
+
+                // Kendi oyuncu
+                const myCh = CHARACTERS[player.profile.charId] || CHARACTERS[0];
+                drawChar(ctx, player.x - camX - PLAYER_SIZE / 2, player.y - camY - PLAYER_SIZE / 2, PLAYER_SIZE, myCh, player.profile, player.facing, player.animFrame, true, '⭐ ' + player.name, player.profile.nameColor);
+
+                drawMinimap();
+            }
+
             function draw() {
                 if (player.dimension === 'space') {
                     drawSpace();
+                    return;
+                }
+                if (player.dimension === 'mars') {
+                    drawMars();
                     return;
                 }
 
@@ -2855,7 +3162,7 @@
 
                 // Diğer oyuncular (dünyada)
                 for (const p of otherPlayers.values()) {
-                    if (p.dimension === 'space') continue;
+                    if (p.dimension === 'space' || p.dimension === 'mars') continue;
                     if (p.x < camX - 80 || p.x > camX + CANVAS_W + 80) continue;
                     if (p.y < camY - 80 || p.y > camY + CANVAS_H + 80) continue;
                     const ch = CHARACTERS[p.profile?.charId || 0] || CHARACTERS[0];
@@ -2902,14 +3209,14 @@
                         if (l.y < camY - 100 || l.y > camY + CANVAS_H + 100) continue;
                         const x = l.x - camX, y = l.y - camY;
                         const grad = ctx.createRadialGradient(x, y - 32, 0, x, y - 32, 130);
-                        grad.addColorStop(0, `rgba(255,235,150,${0.7 * nf})`);
-                        grad.addColorStop(0.4, `rgba(255,220,120,${0.35 * nf})`);
-                        grad.addColorStop(1, 'rgba(255,200,100,0)');
+                        grad.addColorStop(0, `rgba(255,255,255,${0.7 * nf})`);
+                        grad.addColorStop(0.4, `rgba(255,255,255,${0.35 * nf})`);
+                        grad.addColorStop(1, 'rgba(255,255,255,0)');
                         ctx.fillStyle = grad;
                         ctx.beginPath();
                         ctx.arc(x, y - 32, 130, 0, Math.PI * 2);
                         ctx.fill();
-                        ctx.fillStyle = `rgba(255,255,220,${0.9 * nf})`;
+                        ctx.fillStyle = `rgba(255,255,255,${0.9 * nf})`;
                         ctx.beginPath();
                         ctx.arc(x, y - 32, 5, 0, Math.PI * 2);
                         ctx.fill();
@@ -2958,6 +3265,22 @@
                     mmCtx.beginPath();
                     mmCtx.arc(player.x * sx, player.y * sy, 4, 0, Math.PI * 2);
                     mmCtx.fill();
+                } else if (player.dimension === 'mars') {
+                    mmCtx.fillStyle = '#4fd45f';
+                    mmCtx.fillRect(0, 0, w, h);
+                    const sx = w / mars.width, sy = h / mars.height;
+                    mmCtx.fillStyle = 'rgba(255,255,255,0.5)';
+                    mmCtx.beginPath();
+                    mmCtx.arc(mars.entryX * sx, mars.entryY * sy, 4, 0, Math.PI * 2);
+                    mmCtx.fill();
+                    for (const b of mars.buildings) {
+                        mmCtx.fillStyle = b.ownerId === player.id ? '#a0ffa0' : '#2a6a3a';
+                        mmCtx.fillRect(b.x * sx - 2, b.y * sy - 2, 4, 4);
+                    }
+                    mmCtx.fillStyle = '#ffd966';
+                    mmCtx.beginPath();
+                    mmCtx.arc(player.x * sx, player.y * sy, 4, 0, Math.PI * 2);
+                    mmCtx.fill();
                 } else {
                     const sx = w / world.width, sy = h / world.height;
                     mmCtx.fillStyle = '#1a3a1a';
@@ -3000,7 +3323,7 @@
                     }
                     // Oyuncular
                     for (const p of otherPlayers.values()) {
-                        if (p.dimension === 'space') continue;
+                        if (p.dimension === 'space' || p.dimension === 'mars') continue;
                         mmCtx.fillStyle = '#ffa0ff';
                         mmCtx.beginPath();
                         mmCtx.arc(p.x * sx, p.y * sy, 2.5, 0, Math.PI * 2);
