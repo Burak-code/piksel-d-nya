@@ -259,30 +259,6 @@
             </div>
         </div>
 
-        <div class="modal" id="roomModal">
-            <div class="modal-content">
-                <h2>🚪 Oda Kur / Katıl</h2>
-                <div class="label">oda adı</div>
-                <input type="text" id="roomNameInput" placeholder="oda adı" value="piksel-dunyasi" maxlength="20">
-                <div class="label">şifre (opsiyonel)</div>
-                <input type="password" id="roomPasswordInput" placeholder="şifre" maxlength="30">
-                <div>
-                    <button id="createRoomBtn">Yeni Oda Kur</button>
-                    <button id="joinRoomBtn" class="secondary">Katıl</button>
-                </div>
-                <div style="margin-top:12px;font-size:12px;color:#a0b8d0;" id="roomStatus">hazır</div>
-                <div style="margin-top:14px;text-align:left;">
-                    <div style="color:#ffd966;font-size:13px;font-weight:bold;margin-bottom:6px;">📋 Aktif Odalar</div>
-                    <div class="room-list" style="width:100%;max-height:180px;" id="modalRoomList">
-                        <div style="color:#6a8aaa;font-size:11px;">yükleniyor...</div>
-                    </div>
-                </div>
-                <div style="margin-top:12px;">
-                    <button class="cancel" id="closeRoomBtn">Kapat</button>
-                </div>
-            </div>
-        </div>
-
         <div class="modal" id="profileModal">
             <div class="modal-content" style="max-width:560px;">
                 <h2>⚙️ Profil / Ayarlar</h2>
@@ -437,18 +413,6 @@
             </div>
         </div>
 
-        <div class="modal" id="pwModal">
-            <div class="modal-content">
-                <h2>🔒 Şifreli Oda</h2>
-                <div class="label">oda şifresi</div>
-                <input type="password" id="pwInput" placeholder="şifre" maxlength="30">
-                <div>
-                    <button id="pwOkBtn">Gir</button>
-                    <button class="cancel" id="pwCancelBtn">İptal</button>
-                </div>
-            </div>
-        </div>
-
         <div class="modal" id="shopModal">
             <div class="modal-content">
                 <h2>🏪 Dükkan</h2>
@@ -509,12 +473,20 @@
         <div id="levelup"></div>
     </div>
 
-    <!-- ✅ MQTT 5.x — WebSocket bağlantı sorunu çözüldü -->
+    <!-- ✅ MQTT 5.x -->
     <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 
     <script>
         (function() {
             'use strict';
+
+            // ============================================================
+            // 🌐 ANA ODA AYARI — herkes buraya bağlanır
+            // ============================================================
+            const MAIN_ROOM_ID = 'pikseldunya_anaoda_v1';
+            const MAIN_ROOM_NAME = 'Ana Oda';
+            const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+            const TOPIC_PREFIX = 'pikseldunya_v11/';
 
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
                           || (window.matchMedia && window.matchMedia('(max-width: 767px)').matches);
@@ -609,21 +581,9 @@
             const camera = { x:0, y:0 };
             let pendingFriendTarget = null;
             let pendingFriendName = null;
-            let client = null, lobbyClient = null;
+            let client = null;
             let currentRoom = null, roomPassword = null, currentRoomName = null;
             let isConnected = false;
-            const TOPIC_PREFIX = 'pikseldunya_v11/';
-            const LOBBY_TOPIC = 'pikseldunya_v11_lobby';
-            const activeRooms = new Map();
-
-            // ✅ Güncellenmiş broker listesi - test edilmiş çalışan public brokerlar
-            const BROKER_URLS = [
-                'wss://broker.emqx.io:8084/mqtt',
-                'wss://broker.hivemq.com:8884/mqtt',
-                'wss://test.mosquitto.org:8081/mqtt',
-                'wss://mqtt.eclipseprojects.io:443/mqtt',
-            ];
-            let currentBrokerIndex = 0;
 
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
@@ -652,17 +612,8 @@
             const clockDay = $('clockDay');
             const clockTime = $('clockTime');
             const locationLabel = $('locationLabel');
-            const modalRoomList = $('modalRoomList');
             const fireWarning = $('fireWarning');
             const dmNotification = $('dmNotification');
-
-            const roomModal = $('roomModal');
-            const roomNameInput = $('roomNameInput');
-            const roomPasswordInput = $('roomPasswordInput');
-            const createRoomBtn = $('createRoomBtn');
-            const joinRoomBtn = $('joinRoomBtn');
-            const roomStatus = $('roomStatus');
-            const closeRoomBtn = $('closeRoomBtn');
 
             const profileModal = $('profileModal');
             const profileNameInput = $('profileNameInput');
@@ -727,11 +678,6 @@
             const friendsModal = $('friendsModal');
             const friendsList = $('friendsList');
             const closeFriendsBtn = $('closeFriendsBtn');
-
-            const pwModal = $('pwModal');
-            const pwInput = $('pwInput');
-            const pwOkBtn = $('pwOkBtn');
-            const pwCancelBtn = $('pwCancelBtn');
 
             const shopModal = $('shopModal');
             const shopOwnerName = $('shopOwnerName');
@@ -1519,143 +1465,89 @@
                 client.publish(TOPIC_PREFIX + currentRoom + '/fire', JSON.stringify({ id:player.id, fire:{ id:f.id, x:f.x, y:f.y, size:f.size }, password:roomPassword || '' }));
             }
 
-            // ==================== MQTT BAĞLANTI (DÜZELTİLDİ) ====================
-            let connectAttemptTimer = null;
-            let currentBrokerClient = null;
-
-            function connectMQTT(room, password, roomName) {
-                // Temizlik
-                if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
+            // ==================== MQTT BAĞLANTI (OTOMATİK) ====================
+            function connectMQTT() {
                 if (client) { try { client.removeAllListeners(); client.end(true); } catch(e){} client = null; }
 
                 if (typeof mqtt === 'undefined') {
-                    roomStatus.textContent = '❌ MQTT kütüphanesi yüklenemedi!';
                     statusEl.textContent = '❌ mqtt.js yok';
                     setConnectionStatus('❌ MQTT kütüphanesi yüklenemedi — sayfayı yenile', false);
                     return;
                 }
 
                 isConnected = false;
-                roomStatus.textContent = 'bağlanıyor: ' + (roomName || room);
                 statusEl.textContent = '🔌 bağlanıyor...';
-                setConnectionStatus(`🔌 MQTT bağlanıyor (${currentBrokerIndex + 1}/${BROKER_URLS.length})...`, false);
+                setConnectionStatus(`🔌 MQTT bağlanıyor...`, false);
 
-                const brokerUrl = BROKER_URLS[currentBrokerIndex];
                 const clientId = 'pixel_' + player.id + '_' + Math.random().toString(36).substr(2, 6);
-
-                let connected = false;
-                let failed = false;
-
-                console.log(`[MQTT] Deniyorum: ${brokerUrl}`);
+                console.log(`[MQTT] Bağlanıyor: ${BROKER_URL} → ${MAIN_ROOM_NAME}`);
 
                 try {
-                    currentBrokerClient = mqtt.connect(brokerUrl, {
+                    client = mqtt.connect(BROKER_URL, {
                         clientId,
                         clean: true,
-                        connectTimeout: 8000,
-                        reconnectPeriod: 3000, // ✅ otomatik yeniden bağlanma
+                        connectTimeout: 5000,
+                        reconnectPeriod: 1000,
                         keepalive: 30,
-                        protocolVersion: 4,
-                        rejectUnauthorized: false, // ✅ bazı brokerlarda self-signed sertifika için
+                        protocolVersion: 5,
+                        rejectUnauthorized: false,
                     });
-                    client = currentBrokerClient;
                 } catch (e) {
                     console.error('[MQTT] connect hatası:', e);
-                    switchBrokerAndRetry(room, password, roomName, e.message);
+                    statusEl.textContent = '❌ bağlantı hatası: ' + e.message;
+                    setConnectionStatus('❌ MQTT bağlantı hatası!', false);
                     return;
                 }
 
-                // ✅ 10 saniye içinde bağlanamazsa broker değiştir
-                connectAttemptTimer = setTimeout(() => {
-                    if (!connected && !failed) {
-                        failed = true;
-                        console.warn('[MQTT] Zaman aşımı, broker değiştiriliyor');
-                        try { currentBrokerClient.removeAllListeners(); currentBrokerClient.end(true); } catch(e){}
-                        client = null;
-                        switchBrokerAndRetry(room, password, roomName, 'timeout');
-                    }
-                }, 10000);
-
-                currentBrokerClient.on('connect', () => {
-                    if (failed) return;
-                    connected = true;
-                    if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
-
-                    console.log('[MQTT] ✅ Bağlandı:', brokerUrl);
+                client.on('connect', () => {
+                    console.log('[MQTT] ✅ Bağlandı:', BROKER_URL);
                     isConnected = true;
-                    currentRoom = room; roomPassword = password; currentRoomName = roomName || room;
-                    statusEl.textContent = '🟢 ' + (roomName || room);
-                    setConnectionStatus('✅ MQTT bağlandı!', true);
+                    currentRoom = MAIN_ROOM_ID;
+                    currentRoomName = MAIN_ROOM_NAME;
+                    roomPassword = '';
+                    statusEl.textContent = '🟢 ' + MAIN_ROOM_NAME;
+                    setConnectionStatus('✅ Ana Oda\'ya bağlandı!', true);
 
-                    const topic = TOPIC_PREFIX + room + '/#';
-                    currentBrokerClient.subscribe(topic, { qos: 0 }, (err) => {
-                        if (err) { roomStatus.textContent = '❌ abone hatası'; return; }
-                        currentBrokerClient.subscribe(LOBBY_TOPIC, { qos: 0 }, () => {
-                            currentBrokerClient.publish(LOBBY_TOPIC, JSON.stringify({
-                                type:'room_announce', id:player.id, roomId:room,
-                                name:roomName || room, hasPassword:!!password, count:1, ts:Date.now()
-                            }));
-                            roomStatus.textContent = '✅ ' + (roomName || room);
-                            publishPlayerUpdate();
-                            currentBrokerClient.publish(TOPIC_PREFIX + room + '/requestPlayers', JSON.stringify({ from:player.id, name:player.name, password:password || '' }));
-                            addChatMessage('SİSTEM', 'odaya katıldın: ' + (roomName || room), '#ffd966');
-                            closeModal(roomModal);
-                            showToast('🎮 ' + (roomName || room) + ' odasına katıldın!');
-                            currentBrokerClient.publish(TOPIC_PREFIX + room + '/timeSyncRequest', JSON.stringify({ from:player.id, password:password || '' }));
-                            if (!roomTimeOwnerId) roomTimeOwnerId = player.id;
-                        });
+                    const topic = TOPIC_PREFIX + currentRoom + '/#';
+                    client.subscribe(topic, { qos: 0 }, (err) => {
+                        if (err) { console.warn('abone hatası', err); return; }
+                        publishPlayerUpdate();
+                        client.publish(TOPIC_PREFIX + currentRoom + '/requestPlayers', JSON.stringify({ from:player.id, name:player.name, password:'' }));
+                        addChatMessage('SİSTEM', '🟢 Ana Oda\'ya katıldın!', '#ffd966');
+                        client.publish(TOPIC_PREFIX + currentRoom + '/timeSyncRequest', JSON.stringify({ from:player.id, password:'' }));
+                        if (!roomTimeOwnerId) roomTimeOwnerId = player.id;
                     });
                 });
 
-                currentBrokerClient.on('message', (topic, message) => {
+                client.on('message', (topic, message) => {
                     try { handleMQTTMessage(topic, JSON.parse(message.toString())); } catch(e) {}
                 });
 
-                currentBrokerClient.on('error', (err) => {
-                    if (failed || connected) return;
-                    failed = true;
+                client.on('error', (err) => {
                     console.warn('[MQTT] Hata:', err.message || err);
-                    if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
-                    try { currentBrokerClient.removeAllListeners(); currentBrokerClient.end(true); } catch(e){}
-                    client = null;
-                    switchBrokerAndRetry(room, password, roomName, err.message);
+                    if (!isConnected) {
+                        statusEl.textContent = '🟡 bağlantı hatası, yeniden...';
+                        setConnectionStatus('🟡 Bağlantı hatası, yeniden deneniyor...', false);
+                    }
                 });
 
-                currentBrokerClient.on('offline', () => {
-                    if (connected) {
+                client.on('offline', () => {
+                    isConnected = false;
+                    statusEl.textContent = '🟡 bağlantı koptu, yeniden...';
+                    setConnectionStatus('🟡 Bağlantı koptu, yeniden bağlanılıyor...', false);
+                });
+
+                client.on('close', () => {
+                    if (isConnected) {
+                        console.log('[MQTT] bağlantı kapandı, otomatik yeniden bağlanma...');
                         isConnected = false;
-                        statusEl.textContent = '🟡 bağlantı koptu, yeniden...';
-                        setConnectionStatus('🟡 Bağlantı koptu, yeniden bağlanılıyor...', false);
                     }
                 });
-
-                currentBrokerClient.on('close', () => {
-                    if (connected && !failed) {
-                        // MQTT.js'in kendi reconnect'i devreye girecek (reconnectPeriod: 3000)
-                        console.log('[MQTT] bağlantı kapandı, otomatik yeniden bağlanma bekleniyor...');
-                    }
-                });
-            }
-
-            function switchBrokerAndRetry(room, password, roomName, reason) {
-                currentBrokerIndex = (currentBrokerIndex + 1) % BROKER_URLS.length;
-                const msg = `🔄 Broker değiştiriliyor (${currentBrokerIndex + 1}/${BROKER_URLS.length}) — ${reason || ''}`;
-                statusEl.textContent = msg;
-                setConnectionStatus(msg, false);
-                setTimeout(() => connectMQTT(room, password, roomName), 800);
             }
 
             function handleMQTTMessage(topic, data) {
-                if (topic === LOBBY_TOPIC) {
-                    if (data.type === 'room_announce') {
-                        activeRooms.set(data.roomId, { roomId:data.roomId, name:data.name, hasPassword:data.hasPassword, count:data.count, lastSeen:Date.now() });
-                        renderRoomLists();
-                    }
-                    return;
-                }
                 if (!currentRoom) return;
                 const base = TOPIC_PREFIX + currentRoom;
-                if (roomPassword && data.password && data.password !== roomPassword) return;
 
                 if (topic === base + '/playerUpdate') {
                     if (data.id === player.id) return;
@@ -1713,7 +1605,7 @@
                         addChatMessage('ARKADAŞ', `${data.fromName} seni ekledi`, '#ffa0ff');
                         addXP(25);
                         unlockBadge('first_friend');
-                        currentBrokerClient.publish(base + '/friendAccept', JSON.stringify({ from:player.id, fromName:player.name, to:data.from, password:roomPassword || '' }));
+                        client.publish(base + '/friendAccept', JSON.stringify({ from:player.id, fromName:player.name, to:data.from, password:'' }));
                     }
                 }
                 else if (topic === base + '/friendAccept') {
@@ -1724,10 +1616,10 @@
                 }
                 else if (topic === base + '/requestPlayers') {
                     if (data.from === player.id) return;
-                    currentBrokerClient.publish(base + '/playerUpdate', JSON.stringify({
+                    client.publish(base + '/playerUpdate', JSON.stringify({
                         id:player.id, name:player.name, x:player.x, y:player.y, dimension:player.dimension,
                         color:player.color, hp:player.hp, money:player.money, level:player.level,
-                        job:player.job, facing:player.facing, profile:player.profile, password:roomPassword || '',
+                        job:player.job, facing:player.facing, profile:player.profile, password:'',
                     }));
                 }
                 else if (topic === base + '/playerLeave') {
@@ -1762,8 +1654,8 @@
                 else if (topic === base + '/timeSyncRequest') {
                     if (data.from === player.id) return;
                     if (roomTimeOwnerId === player.id || !roomTimeOwnerId) {
-                        currentBrokerClient.publish(base + '/gameTime', JSON.stringify({
-                            id: player.id, gameHours: accumulatedGameHours, isTimeOwner: true, password: roomPassword || ''
+                        client.publish(base + '/gameTime', JSON.stringify({
+                            id: player.id, gameHours: accumulatedGameHours, isTimeOwner: true, password:''
                         }));
                     }
                 }
@@ -1796,39 +1688,37 @@
                     client.publish(TOPIC_PREFIX + currentRoom + '/playerUpdate', JSON.stringify({
                         id:player.id, name:player.name, x:player.x, y:player.y, dimension:player.dimension,
                         color:player.color, hp:player.hp, money:player.money, level:player.level,
-                        job:player.job, facing:player.facing, profile:player.profile, password:roomPassword || '',
+                        job:player.job, facing:player.facing, profile:player.profile, password:'',
                     }));
                 } catch(e) {}
             }
             function publishChat(text) {
                 if (!client || !isConnected || !currentRoom) return;
                 client.publish(TOPIC_PREFIX + currentRoom + '/chat', JSON.stringify({
-                    id:player.id, name:player.name, text, nameColor:player.profile.nameColor, password:roomPassword || '',
+                    id:player.id, name:player.name, text, nameColor:player.profile.nameColor, password:'',
                 }));
             }
             function publishTrade(data) {
                 if (!client || !isConnected || !currentRoom) return;
-                data.password = roomPassword || '';
+                data.password = '';
                 client.publish(TOPIC_PREFIX + currentRoom + '/trade', JSON.stringify(data));
             }
             function publishDm(toId, toName, text) {
                 if (!client || !isConnected || !currentRoom) return;
                 client.publish(TOPIC_PREFIX + currentRoom + '/dm', JSON.stringify({
-                    id: player.id, fromName: player.name, to: toId, toName, text, password: roomPassword || '',
+                    id: player.id, fromName: player.name, to: toId, toName, text, password:'',
                 }));
             }
             function publishPlanetAdd(planet) {
                 if (!client || !isConnected || !currentRoom) return;
-                client.publish(TOPIC_PREFIX + currentRoom + '/planetAdd', JSON.stringify({
-                    id: player.id, planet, password: roomPassword || ''
-                }));
+                client.publish(TOPIC_PREFIX + currentRoom + '/planetAdd', JSON.stringify({ id: player.id, planet, password:'' }));
             }
             function sendFriendRequest() {
                 if (!pendingFriendTarget) { showToast('önce bir oyuncuyla etkileşime geç (E)'); return; }
                 if (player.friends.includes(pendingFriendName)) { showToast(`${pendingFriendName} zaten arkadaşın ✅`); pendingFriendTarget = null; return; }
                 if (!client || !isConnected || !currentRoom) { showToast('bağlantı yok ❌'); return; }
                 client.publish(TOPIC_PREFIX + currentRoom + '/friendRequest', JSON.stringify({
-                    from: player.id, fromName: player.name, to: pendingFriendTarget, password: roomPassword || '',
+                    from: player.id, fromName: player.name, to: pendingFriendTarget, password:'',
                 }));
                 player.friends.push(pendingFriendName);
                 player.stats.friendCount++;
@@ -1845,7 +1735,7 @@
             }
             function publishPlayerLeave() {
                 if (!client || !isConnected || !currentRoom) return;
-                try { client.publish(TOPIC_PREFIX + currentRoom + '/playerLeave', JSON.stringify({ id:player.id, password:roomPassword || '' })); } catch(e) {}
+                try { client.publish(TOPIC_PREFIX + currentRoom + '/playerLeave', JSON.stringify({ id:player.id, password:'' })); } catch(e) {}
             }
 
             // ==================== DM ====================
@@ -2207,7 +2097,7 @@
                 if (!client || !isConnected || !currentRoom) return;
                 const myHouse = world.houses.find(h => h.ownerId === player.id);
                 if (!myHouse) return;
-                client.publish(TOPIC_PREFIX + currentRoom + '/houseUpdate', JSON.stringify({ id: player.id, houseId: myHouse.id, ownerName: player.name, password: roomPassword || '' }));
+                client.publish(TOPIC_PREFIX + currentRoom + '/houseUpdate', JSON.stringify({ id: player.id, houseId: myHouse.id, ownerName: player.name, password:'' }));
             }
             houseBtn.addEventListener('click', openHouseModal);
             closeHouseBtn.addEventListener('click', () => closeModal(houseModal));
@@ -2558,7 +2448,7 @@
             function publishMarsUpdate() {
                 if (!client || !isConnected || !currentRoom) return;
                 const myBuildings = mars.buildings.filter(b => b.ownerId === player.id);
-                client.publish(TOPIC_PREFIX + currentRoom + '/marsUpdate', JSON.stringify({ id:player.id, buildings:myBuildings, password:roomPassword || '' }));
+                client.publish(TOPIC_PREFIX + currentRoom + '/marsUpdate', JSON.stringify({ id:player.id, buildings:myBuildings, password:'' }));
             }
             function openShop(shop) {
                 shopOwnerName.textContent = '👤 ' + shop.ownerName;
@@ -2641,7 +2531,7 @@
             function publishShopUpdate() {
                 if (!client || !isConnected || !currentRoom) return;
                 const myShops = world.shops.filter(s => s.ownerId === player.id);
-                client.publish(TOPIC_PREFIX + currentRoom + '/shopUpdate', JSON.stringify({ id:player.id, shops:myShops, password:roomPassword || '' }));
+                client.publish(TOPIC_PREFIX + currentRoom + '/shopUpdate', JSON.stringify({ id:player.id, shops:myShops, password:'' }));
             }
             function openTradeModal() {
                 tradeTargetSelect.innerHTML = '';
@@ -2839,8 +2729,7 @@
                             }
                             updateUI();
                             saveProfileToLocal();
-                            showToast('📂 oda yüklendi, bağlanılıyor...');
-                            if (data.room) connectMQTT(data.room, data.password || '', data.roomName || data.room);
+                            showToast('📂 kayıt yüklendi');
                         } catch (err) {
                             showToast('❌ dosya okunamadı');
                         }
@@ -2856,11 +2745,9 @@
             closeBadgeBtn.addEventListener('click', () => closeModal(badgeModal));
             lbBtn.addEventListener('click', openLbModal);
             closeLbBtn.addEventListener('click', () => closeModal(lbModal));
-            closeRoomBtn.addEventListener('click', () => closeModal(roomModal));
             jobBtn.addEventListener('click', openJobModal);
             closeJobBtn.addEventListener('click', () => closeModal(jobModal));
 
-            // SATRANÇ
             chessBoard.addEventListener('click', handleChessClick);
             chessColorWhite.addEventListener('click', () => {
                 if (chess.players[player.id]) return;
@@ -2889,8 +2776,13 @@
             $('mmBadge').addEventListener('click', () => { openBadgeModal(); mobileMenu.classList.remove('active'); });
             $('mmLb').addEventListener('click', () => { openLbModal(); mobileMenu.classList.remove('active'); });
             $('mmShopSetup').addEventListener('click', () => { openShopSetup(); mobileMenu.classList.remove('active'); });
-            $('mmMarsBuild').addEventListener('click', () => { openMarsBuildMenu(); mobileMenu.classList.remove('active'); });
+            $('mmMarsBuild').addEventListener('click', () => { openMarsBuildModalSafe(); mobileMenu.classList.remove('active'); });
             $('mmMap').addEventListener('click', () => { minimapCanvas.classList.toggle('expanded'); mobileMenu.classList.remove('active'); });
+
+            function openMarsBuildModalSafe() {
+                if (player.dimension !== 'mars') { showToast('sadece Marslar\'da inşa edebilirsin 🪐'); return; }
+                openMarsBuildMenu();
+            }
 
             // ==================== KARAKTER ÇİZİMİ ====================
             function drawCustomPixels(ctx, x, y, size, pixels) {
@@ -3834,92 +3726,17 @@
             initQuests();
             updateUI();
             renderCharGrid();
-            renderRoomLists();
             setInterval(saveProfileToLocal, 5000);
-            setInterval(renderRoomLists, 3000);
             addChatMessage('SİSTEM', 'piksel dünya\'ya hoş geldin!', '#ffd966');
             addChatMessage('SİSTEM', '🏠 H ile ev al | 🚀 Portaldan uzaya git', '#6ae8c4');
             addChatMessage('SİSTEM', '♟️ Uzayda Satranç gezegeni var! İki kişi oynayabilir.', '#ffd966');
             addChatMessage('SİSTEM', '✉️ Arkadaşınla özel mesaj için 👥 Arkadaşlar menüsünü kullan', '#a08aff');
             addChatMessage('SİSTEM', '🎨 Profilden karakterini pixel pixel boyayabilirsin!', '#ffa0ff');
             resetGameTime();
-            openModal(roomModal);
-            function renderRoomLists() {
-                const now = Date.now();
-                for (const [id, r] of activeRooms) if (now - r.lastSeen > 30000) activeRooms.delete(id);
-                const rooms = Array.from(activeRooms.values()).sort((a, b) => b.lastSeen - a.lastSeen);
-                if (modalRoomList) {
-                    modalRoomList.innerHTML = '';
-                    if (rooms.length === 0) modalRoomList.innerHTML = '<div style="color:#6a8aaa;font-size:11px;">şu an aktif oda yok</div>';
-                    else rooms.forEach(r => {
-                        const el = document.createElement('div');
-                        el.className = 'room-item';
-                        el.innerHTML = `<div class="name">${r.hasPassword ? '🔒' : '🔓'} ${r.name}</div><div class="count">${r.count}👤</div>`;
-                        el.onclick = () => tryJoinRoom(r);
-                        modalRoomList.appendChild(el);
-                    });
-                }
-            }
-            function tryJoinRoom(r) {
-                if (r.hasPassword) {
-                    pwInput.value = '';
-                    pwModal.dataset.roomId = r.roomId;
-                    pwModal.dataset.roomName = r.name;
-                    openModal(pwModal);
-                } else {
-                    connectMQTT(r.roomId, '', r.name);
-                    closeModal(roomModal);
-                }
-            }
-            pwOkBtn.addEventListener('click', () => {
-                const pw = pwInput.value;
-                const roomId = pwModal.dataset.roomId;
-                const roomName = pwModal.dataset.roomName;
-                closeModal(pwModal);
-                connectMQTT(roomId, pw, roomName);
-            });
-            pwCancelBtn.addEventListener('click', () => closeModal(pwModal));
-            function getRoomId(name) { return name.toLowerCase().replace(/[^a-z0-9-_]/g, '').substr(0, 25) || 'genel'; }
-            createRoomBtn.addEventListener('click', () => {
-                const name = roomNameInput.value.trim() || 'piksel-dunyasi';
-                const pw = roomPasswordInput.value;
-                connectMQTT(getRoomId(name) + '_' + Math.random().toString(36).substr(2, 5), pw, name);
-            });
-            joinRoomBtn.addEventListener('click', () => {
-                const name = roomNameInput.value.trim() || 'piksel-dunyasi';
-                const pw = roomPasswordInput.value;
-                connectMQTT(getRoomId(name), pw, name);
-            });
-            function connectLobbyOnly() {
-                if (typeof mqtt === 'undefined') {
-                    console.warn('[LOBBY] mqtt.js yüklü değil');
-                    return;
-                }
-                try {
-                    lobbyClient = mqtt.connect(BROKER_URLS[0], {
-                        clientId: 'lobby_' + Math.random().toString(36).substr(2, 8),
-                        clean:true, connectTimeout:10000, reconnectPeriod:5000,
-                        rejectUnauthorized: false,
-                    });
-                    lobbyClient.on('connect', () => {
-                        console.log('[LOBBY] ✅ bağlandı');
-                        lobbyClient.subscribe(LOBBY_TOPIC, { qos: 0 });
-                        lobbyClient.publish(LOBBY_TOPIC, JSON.stringify({ type:'room_request', id:'lobby' }));
-                    });
-                    lobbyClient.on('message', (topic, message) => {
-                        if (topic !== LOBBY_TOPIC) return;
-                        try {
-                            const data = JSON.parse(message.toString());
-                            if (data.type === 'room_announce') {
-                                activeRooms.set(data.roomId, { roomId:data.roomId, name:data.name, hasPassword:data.hasPassword, count:data.count, lastSeen:Date.now() });
-                                renderRoomLists();
-                            }
-                        } catch(e) {}
-                    });
-                    lobbyClient.on('error', (e) => console.warn('[LOBBY] hata:', e.message));
-                } catch(e) { console.warn('[LOBBY] bağlantı hatası:', e); }
-            }
-            setTimeout(connectLobbyOnly, 800);
+
+            // ✅ OTOMATİK BAĞLAN — Ana Oda
+            setTimeout(connectMQTT, 300);
+
             requestAnimationFrame(gameLoop);
             window.addEventListener('beforeunload', () => {
                 publishPlayerLeave();
